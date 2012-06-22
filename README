@@ -1,0 +1,33 @@
+Multipurpose, radiation hydrodynamics code with self-gravity and the ability to track particles.
+The code also converts to a particle-particle-particle-in-cell code.  The is still in its test
+phases.  
+
+o Type "make" to make with gcc.  
+
+o The code is currently set up to perform a Sod shock tube test.
+
+o After the code is compiled, run it using ./boxzy in.nml, where in.nml is the provided namelist file. Again
+  this is set up for the Sod shock tube test.
+
+o After the simulation has finished, it will provide two outputs, celldump.00000001 and celldump.00000107, where
+  the numbers refer to the timestep.  Go into the analysis directory, and type
+
+  gfortran -o bin_to_ascii bin_to_ascii.f90
+
+  This execultable will now take the formatted celldump files and turn them into ascii format for quick plotting use.
+  Execute by typing
+
+  ./bin_to_ascii ../celdump.00000107 T > mysod.dat
+
+  Now GNUPLOT.
+
+  >fmine="mysod.dat"
+  >fcomp="sodtest.dat"
+  >set xlabel "DISTANCE"
+  >set ylable "DENSITY"
+  >plot fmine u 2:4, fcomp u 2:4
+
+  The resulting plot will show the density profile.  The curves should be on top of each other, where sodtest.dat is
+  a pregenerated file for comparisons.  2:5 will plot the pressure, and 2:($5/$4) will plot a specific energy-like term.
+
+  More soon.
