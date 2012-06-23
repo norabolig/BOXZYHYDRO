@@ -84,7 +84,6 @@ print *, "Got pot using expansion"
 #if VERBOSE
 #endif
 #ifdef USEPERT
- rhophi=phi
 #if VERBOSE
  print *,"Should call rochepert"
 #endif
@@ -338,15 +337,6 @@ do
  if(npart>0.and.use_pic)then
 #endif
  call set_com_in_tree
-#ifdef USEPERT
-!$OMP PARALLEL 
-!$OMP DO SCHEDULE(STATIC)
- do igrid=1,ngrid
-   phi(igrid)=rhophi(igrid)
- enddo
-!$OMP END DO
-!$OMP END PARALLEL
-#endif
 #ifdef FASTGRAVITY
  call get_pot_bc_from_tree
  call vcycle_pot() !sor_potential2(sor_iter)
@@ -354,11 +344,6 @@ do
  call get_pot_from_tree
 #endif
 #ifdef USEPERT
-!$OMP PARALLEL DO SCHEDULE(STATIC)
- do igrid=1,ngrid
-   rhophi(igrid)=phi(igrid)
- enddo
-!$OMP END PARALLEL DO
  call rochepert()
 #endif
 #ifdef NOHYDRO
