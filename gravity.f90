@@ -1097,8 +1097,6 @@ end function
   real(pre)::xcom,ycom,zcom,plan,soft,r
 
 
-  print *,"In external phi"
-
 !$OMP PARALLEL DEFAULT(PRIVATE) SHARED(grid,phi,ngrid,dx)
   mbin=one
   mbox=30d-3/320.
