@@ -49,7 +49,7 @@ module parameters
  real(pre)::starttime=0d0
  real(pre)::endtime=0d0
  real(pre)::dtout=20d0
- real(pre)::cfl=0.5d0
+ real(pre)::cfl=0.25d0
 
  real(pre)::den_change_tol=0.1d0
  real(pre)::avmagx=0.0d0,avmagy=0.d0,avmagz=0.00d0
