@@ -2,9 +2,8 @@ module derived_types
  use parameters 
 
  type gridcell
-  integer:: id,ix,iy,iz
+  integer:: id,ix,iy,iz,boundary
   integer,dimension(6):: ineigh
-  logical::boundary,anchor
   real(pre)::x,y,z
  end type
 

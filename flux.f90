@@ -1,3 +1,8 @@
+!
+! Fluxing routine that uses centeral differencing or upwind schemes
+! At the moment, variables f2,f1,f0,fm1 are calculated but not used
+! This will likely be removed, but it may stick around for a bit
+!
 subroutine flux()
  use parameters
  use derived_types
@@ -10,10 +15,10 @@ subroutine flux()
  integer :: igrid,b(6),idim,flag
  real(pre)::fxl,fxr,fyt,fyb,fzt,fzb,areaxy,areayz,areaxz
  real(pre)::vol,v,f2,f1,f0,fm1,slopef,slopeb,left,right
- real(pre)::x,y,z,r,angmom,rmom,r_ang_min
+ real(pre)::x,y,z,r,angmom,rmom
  real(pre)::u1,u2,u0,um1,fleft,fright
 
- logical :: active,assoc_con
+ logical :: assoc_con
  type(units)::scale
 
  call get_units(scale)
@@ -24,7 +29,7 @@ subroutine flux()
 !$OMP&PRIVATE(areaxy,areayz,areaxz,u1,u2,u0,um1,fleft,fright) &
 !$OMP&private(v,f2,f1,f0,fm1,slopef,slopeb,flag) &
 !$OMP&private(fzt,fzb,fxr,fxl,fyt,fyb,left,right) &
-!$OMP&private(b,active,angmom,rmom,x,y,z,r,assoc_con)
+!$OMP&private(b,angmom,rmom,x,y,z,r,assoc_con)
 
  areaxy=dy*dx
  areayz=dy*dz
@@ -72,9 +77,9 @@ subroutine flux()
 !$OMP DO SCHEDULE(static)
  do igrid=1,ngrid
 
-  if(grid(igrid)%anchor)cycle
+  if(grid(igrid)%boundary>0)cycle
 
-  call get_boundary_wb(igrid,b,active)
+  call get_boundary_wb(igrid,b)
   x=grid(igrid)%x;y=grid(igrid)%y+yoffset;z=grid(igrid)%z
   r=sqrt(x*x+y*y)
 
@@ -90,36 +95,28 @@ subroutine flux()
       fm1=um1*u(2,b(2))
 
      flag=0
-     if(grid(b(1))%anchor)then
-#ifdef FREEFLOW
-       v=u(2,igrid) 
-       u2=u1
-       f2=f1
-#else
-       v=zero
-       f2=zero
-       f1=zero
-       u2=zero
-       flag=1
-#endif
+     if(grid(b(1))%boundary>0)then
+       if(no_out_flow.or.(grid(b(1))%boundary>2))flag=1
      else
          u2=cons(idim,grid(b(1))%ineigh(1))
          f2=u2*u(2,grid(b(1))%ineigh(1))
      endif
  
+     if(flag==0)then
 #ifdef UPWIND
      fyt=v*upwind(u2,u1,u0,um1,v,dy,dt)
 #else
 #ifdef TCDIFFERENCE
-     call left_right_states(f2,f1,f0,fm1,fleft,fright)
      call left_right_states(u2,u1,u0,um1,left,right)
 
-     fyt=half*(fleft+fright)-abs(v)*(right-left)
+     fyt=v*half*(left+right)-abs(v)*(right-left)
 #else
      stop"Unknown flux type"
 #endif
 #endif
-     if(flag==1)fyt=zero
+     else
+       fyt=zero
+     endif
 
      v=-half*(u(2,igrid)+u(2,b(2)))
 
@@ -130,34 +127,27 @@ subroutine flux()
      f0=-u0*u(2,igrid)
      fm1=-um1*u(2,b(1))
      flag=0
-     if(grid(b(2))%anchor)then
-#ifdef FREEFLOW
-       v=-u(2,igrid)
-       f2=f1
-       u2=u1
-#else
-       v=zero
-       f1=zero
-       f2=zero
-       u2=zero
-       flag=1
-#endif
+
+     if(grid(b(2))%boundary>0)then
+       if(no_out_flow.or.(grid(b(2))%boundary>2))flag=1
      else
        u2=cons(idim,grid(b(2))%ineigh(2))
        f2=-u2*u(2,grid(b(2))%ineigh(2))
      endif
-       
+      
+     if(flag==0)then 
 #ifdef UPWIND
      fyb=v*upwind(u2,u1,u0,um1,v,dy,dt)
 #else
 #ifdef TCDIFFERENCE
-     call left_right_states(f2,f1,f0,fm1,fleft,fright)
      call left_right_states(u2,u1,u0,um1,left,right)
 
-     fyb=half*(fleft+fright)-abs(v)*(right-left)
+     fyb=v*half*(left+right)-abs(v)*(right-left)
 #endif
 #endif
-     if(flag==1)fyb=zero
+     else
+      fyb=zero
+     endif
 
 !!!!X 3 and 4
 
@@ -171,35 +161,27 @@ subroutine flux()
       fm1=um1*u(1,b(4))
  
      flag=0
-     if(grid(b(3))%anchor)then
-#ifdef FREEFLOW
-       v=u(1,igrid) 
-       f2=f1
-       u2=u1
-#else
-       v=zero
-       f2=zero
-       f1=zero
-       u2=zero
-       flag=1
-#endif
+
+     if(grid(b(3))%boundary>0)then
+       if(no_out_flow.or.(grid(b(3))%boundary>2))flag=1
      else
          u2=cons(idim,grid(b(3))%ineigh(3))
          f2=u2*u(1,grid(b(3))%ineigh(3))
      endif
  
+     if(flag==0)then
 #ifdef UPWIND
      fxr=v*upwind(u2,u1,u0,um1,v,dx,dt)
 #else
 #ifdef TCDIFFERENCE
-     call left_right_states(f2,f1,f0,fm1,fleft,fright)
      call left_right_states(u2,u1,u0,um1,left,right)
 
-     fxr=half*(fleft+fright)-abs(v)*(right-left)
+     fxr=v*half*(left+right)-abs(v)*(right-left)
 #endif
 #endif
- 
-     if(flag==1)fxr=zero
+     else
+      fxr=zero
+     endif
 
      v=-half*(u(1,igrid)+u(1,b(4)))
 
@@ -211,36 +193,28 @@ subroutine flux()
      fm1=-um1*u(1,b(3))
 
      flag=0
-     if(grid(b(4))%anchor)then
-#ifdef FREEFLOW
-       v=-u(1,igrid)
-       f2=f1
-       u2=u1
-#else
-       v=zero
-       f1=zero
-       f2=zero
-       u2=zero
-       flag=1
-#endif
+
+     if(grid(b(4))%boundary>0)then
+       if(no_out_flow.or.(grid(b(4))%boundary>2))flag=1
      else
-         u2=cons(idim,grid(b(4))%ineigh(4))
-         f2=-u2*u(1,grid(b(4))%ineigh(4))
+       u2=cons(idim,grid(b(4))%ineigh(4))
+       f2=-u2*u(1,grid(b(4))%ineigh(4))
      endif
        
 
+     if(flag==0)then
 #ifdef UPWIND
      fxl=v*upwind(u2,u1,u0,um1,v,dx,dt)
 #else
 #ifdef TCDIFFERENCE
-     call left_right_states(f2,f1,f0,fm1,fleft,fright)
      call left_right_states(u2,u1,u0,um1,left,right)
 
-     fxl=half*(fleft+fright)-abs(v)*(right-left)
+     fxl=v*half*(left+right)-abs(v)*(right-left)
 #endif
 #endif
- 
-     if(flag==1)fxl=zero
+     else
+      fxl=zero
+     endif
 
 !!!Z 5 and 6
 
@@ -254,34 +228,27 @@ subroutine flux()
       fm1=um1*u(3,b(6))
  
      flag=0
-     if(grid(b(5))%anchor)then
-#ifdef FREEFLOW
-       v=u(3,igrid) 
-       f2=f1
-       u2=u1
-#else
-       v=zero
-       f2=zero
-       f1=zero
-       u2=zero
-       flag=1
-#endif
+
+     if(grid(b(5))%boundary>0)then
+       if(no_out_flow.or.(grid(b(5))%boundary>2))flag=1
      else
          u2=cons(idim,grid(b(5))%ineigh(5))
          f2=u2*u(3,grid(b(5))%ineigh(5))
      endif
 
+     if(flag==0)then
 #ifdef UPWIND
      fzt=v*upwind(u2,u1,u0,um1,v,dz,dt)
 #else
 #ifdef TCDIFFERENCE
-     call left_right_states(f2,f1,f0,fm1,fleft,fright)
      call left_right_states(u2,u1,u0,um1,left,right)
 
-     fzt=half*(fleft+fright)-abs(v)*(right-left)
+     fzt=v*half*(left+right)-abs(v)*(right-left)
 #endif
 #endif
-     if(flag==1)fzt=zero
+     else
+       fzt=zero
+     endif
 
      v=-half*(u(3,igrid)+u(3,b(6)))
 
@@ -293,34 +260,27 @@ subroutine flux()
      fm1=-um1*u(3,b(5))
 
      flag=0
-     if(grid(b(6))%anchor)then
-#ifdef FREEFLOW
-       v=-u(3,igrid)
-       f2=f1
-       u2=u1
-#else
-       v=zero
-       f1=zero
-       f2=zero
-       u2=zero
-       flag=1
-#endif
+
+     if(grid(b(6))%boundary>0)then
+       if(no_out_flow.or.(grid(b(6))%boundary>2))flag=1
      else
          u2=cons(idim,grid(b(6))%ineigh(6))
          f2=-u2*u(3,grid(b(6))%ineigh(6))
      endif
        
+     if(flag==0)then
 #ifdef UPWIND
      fzb=v*upwind(u2,u1,u0,um1,v,dz,dt)
 #else
 #ifdef TCDIFFERENCE
-     call left_right_states(f2,f1,f0,fm1,fleft,fright)
      call left_right_states(u2,u1,u0,um1,left,right)
 
-     fzb=half*(fleft+fright)-abs(v)*(right-left)
+     fzb=v*half*(left+right)-abs(v)*(right-left)
 #endif
 #endif
-     if(flag==1)fzb=zero
+     else
+       fzb=zero
+     endif
 
      fluxtmp(idim,igrid)=-( areaxy*(fzt+fzb)+areayz*(fxr+fxl)+areaxz*(fyt+fyb))&
                      /(vol)*dt
@@ -328,6 +288,13 @@ subroutine flux()
  enddo
 !$OMP ENDDO 
 !$OMP BARRIER
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Done with the big loop
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! Now update the conserved quantities
+
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
   do idim=1,5
@@ -335,6 +302,8 @@ subroutine flux()
   enddo
  enddo
 !$OMP ENDDO
+
+! Put things back in order
  
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
@@ -377,7 +346,6 @@ subroutine flux()
     x=grid(igrid)%x;y=grid(igrid)%y+yoffset
     r=sqrt(x*x+y*y)
     cons_pt(1,igrid)=max(cons_pt(1,igrid),small_rho)
-    if(r>=r_ang_min)then
      angmom=cons_pt(3,igrid)
      rmom=cons_pt(2,igrid)
      cons_pt(3,igrid)=(rmom*y+x*angmom/r)/(x*x/r+y*y/r) 
@@ -386,62 +354,15 @@ subroutine flux()
      else
        cons_pt(2,igrid)=(x*cons_pt(3,igrid)-angmom)/y
      endif
-    endif
  enddo
 !$OMP ENDDO NOWAIT
- endif
- endif
- 
-!$OMP DO SCHEDULE(STATIC)
-  do igrid=1,nbound
-#ifdef FREEFLOW
-    !print *, "unsupported at the moment"
-    !stop
-    cons_pt(1,indx_bound(igrid))=small_rho
-    cons_pt(2,indx_bound(igrid))=zero 
-    cons_pt(3,indx_bound(igrid))=zero 
-    cons_pt(4,indx_bound(igrid))=zero 
-    cons_pt(5,indx_bound(igrid))=small_eps
+ endif ! assoc_con
+ endif ! fluxangmom
 
-#else
-    cons_pt(1,indx_bound(igrid))=small_rho
-    cons_pt(2,indx_bound(igrid))=zero 
-    cons_pt(3,indx_bound(igrid))=zero 
-    cons_pt(4,indx_bound(igrid))=zero 
-    cons_pt(5,indx_bound(igrid))=small_eps
-#endif
-  enddo
-!$OMP ENDDO
-
-#ifdef EXTRAANCHORS
-
-!$OMP DO SCHEDULE(STATIC)
-  do igrid=1,nanchor
-#ifdef FREEFLOW
-    !print *, "unsupported at the moment"
-    !stop
-    cons_pt(1,indx_anchor(igrid))=small_rho
-    cons_pt(2,indx_anchor(igrid))=zero 
-    cons_pt(3,indx_anchor(igrid))=zero 
-    cons_pt(4,indx_anchor(igrid))=zero 
-    cons_pt(5,indx_anchor(igrid))=small_eps
-
-#else
-    cons_pt(1,indx_anchor(igrid))=small_rho
-    cons_pt(2,indx_anchor(igrid))=zero 
-    cons_pt(3,indx_anchor(igrid))=zero 
-    cons_pt(4,indx_anchor(igrid))=zero 
-    cons_pt(5,indx_anchor(igrid))=small_eps
-#endif
-  enddo
-!$OMP ENDDO
-
-#endif
+ call set_ghost_cells()
 
 !$OMP END PARALLEL
 
  deallocate(fluxtmp)
-
-!deallocate(ekin,ekin_old)
 
 end subroutine

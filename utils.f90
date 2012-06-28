@@ -32,70 +32,21 @@ module utils
 
  end function
 
- subroutine get_boundary_anchor(igrid,b,active_grid)
+ subroutine get_boundary(igrid,b)
   use derived_types
   use grid_commons
   integer, intent(in)::igrid
   integer, intent(out)::b(6)
   integer::idx
-  logical::active_grid
 
-  active_grid=.true.
-  if(grid(igrid)%anchor)then
-    active_grid=.false.
-    return
-  endif
-  
   do idx=1,6
    b(idx)=grid(igrid)%ineigh(idx)
-   if(grid(b(idx))%anchor)b(idx)=igrid
-  enddo
-
- end subroutine get_boundary_anchor
-
-
- subroutine get_boundary(igrid,b,active_grid)
-  use derived_types
-  use grid_commons
-  integer, intent(in)::igrid
-  integer, intent(out)::b(6)
-  integer::idx
-  logical::active_grid
-
-  active_grid=.true.
-  if(grid(igrid)%boundary)then
-    active_grid=.false.
-    return
-  endif
-  
-  do idx=1,6
-   b(idx)=grid(igrid)%ineigh(idx)
-   if(grid(b(idx))%boundary)b(idx)=igrid
+   if(grid(b(idx))%boundary>0)b(idx)=igrid
   enddo
 
  end subroutine get_boundary
 
- subroutine get_boundary_wb_loc(g,b,active_grid)
-  use derived_types
-  integer, intent(out)::b(6)
-  integer::idx
-  type(gridcell), intent(in)::g
-  logical::active_grid
-
-  active_grid=.true.
-  if(g%boundary)then
-    active_grid=.false.
-    return
-  endif
-  
-  do idx=1,6
-   b(idx)=g%ineigh(idx)
-  enddo
-
- end subroutine get_boundary_wb_loc
-
-
- subroutine get_boundary_wb(igrid,b,active_grid)
+ subroutine get_boundary_wb(igrid,b)
   use derived_types
   use grid_commons
   integer, intent(in)::igrid
@@ -103,12 +54,6 @@ module utils
   integer::idx
   logical::active_grid
 
-  active_grid=.true.
-  if(grid(igrid)%boundary)then
-    active_grid=.false.
-    return
-  endif
-  
   do idx=1,6
    b(idx)=grid(igrid)%ineigh(idx)
   enddo
@@ -123,18 +68,17 @@ module utils
   integer::bt(6)
   real(pre),intent(in)::x,y,z
   real(pre)::delz
-  logical::active 
 
   igrid=get_grid_indx(x,y,z)
-  call get_boundary(igrid,bb,active)
+  call get_boundary(igrid,bb)
 
   delz=z-grid(igrid)%z
   if(delz<zero)then
      igrid=bb(6)
-     call get_boundary(igrid,bb,active)
+     call get_boundary(igrid,bb)
   endif
   igridt=bb(5)
-  call get_boundary(igridt,bt,active)
+  call get_boundary(igridt,bt)
   
   neigh(5)=bb(5)
   neigh(6)=igrid
@@ -183,16 +127,49 @@ module utils
   
  end subroutine
 
+ subroutine set_ghost_cells()
+  use grid_commons
+  integer::igrid,idx,idim,ineigh
+
+!$OMP DO SCHEDULE(STATIC) PRIVATE(idx,ineigh)
+  do igrid=1,nghost
+    idx=indx_ghost(igrid)
+    ineigh=grid(idx)%ineigh(1)
+    do idim=1,5
+      cons(idim,idx)=cons(idim,ineigh)
+    enddo
+    do idim=1,3
+      u(idim,idx)=u(idim,ineigh)
+    enddo
+  enddo
+!$OMP ENDDO
+
+#ifdef EXTRAANCHORS
+!$OMP DO SCHEDULE(STATIC) PRIVATE(idx)
+  do igrid=1,nanchor
+    idx=indx_anchor(igrid)
+    cons(1,idx)=small_rho
+    cons(2,idx)=zero
+    cons(3,idx)=zero
+    cons(4,idx)=zero
+    cons(5,idx)=small_eps
+    u(1:3,idx)=zero
+  enddo
+!$OMP ENDDO
+#endif
+
+ end subroutine
+
  subroutine calc_gforce()
   use grid_commons
   integer::igrid,b(6)
   logical::active
 
 !$OMP DO SCHEDULE(STATIC) &
-!$OMP&PRIVATE(b,active)
+!$OMP&PRIVATE(b)
   do igrid=1,ngrid
-    call get_boundary_wb(igrid,b,active)
-    if(.not.active)cycle
+    if(grid(igrid)%boundary>0)cycle
+    call get_boundary_wb(igrid,b)
 
     gforce(1,igrid)=-(phi(b(3))-phi(b(4)))/(two*dx)
     gforce(2,igrid)=-(phi(b(1))-phi(b(2)))/(two*dy)
@@ -443,7 +420,7 @@ module utils
    integer::igrid,b(6),idim
    logical::flag,active
 
-   call get_boundary(igrid,b,active)
+   call get_boundary(igrid,b)
    call flux_jacobian(var,v,idim,b,jac)
    call matrix3_eigen(l,jac,flag)
    if(flag)then

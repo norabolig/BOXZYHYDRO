@@ -389,12 +389,9 @@ do
      write(100,'(A25,1pe16.8E3,I8)')"#Time of snapshot at step:",time,step
      write(100,'(A,1X,8(1pe15.8,1X))')'#',scale
      do igrid=1,ngrid
-       ibd=0
-       if(grid(igrid)%boundary)ibd=1
-       !if(grid(igrid)%boundary)cycle
         write(100,'(11(1pe16.8E3,1X),I2)'),grid(igrid)%x,grid(igrid)%y,grid(igrid)%z,&
            cons(1,igrid),p(igrid),&
-           u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),cons(5,igrid),muc_array(igrid),ibd
+           u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),cons(5,igrid),muc_array(igrid),grid(igrid)%boundary
      enddo
    else
      open(unit=100,file=filename,form='UNFORMATTED')
@@ -402,12 +399,9 @@ do
      write(100)time,step
      write(100)scale
      do igrid=1,ngrid
-       ibd=0
-       if(grid(igrid)%boundary)ibd=1
-       !if(grid(igrid)%boundary)cycle
         write(100)grid(igrid)%x,grid(igrid)%y,grid(igrid)%z,&
            cons(1,igrid),p(igrid), &
-           u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),cons(5,igrid),muc_array(igrid),ibd
+           u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),cons(5,igrid),muc_array(igrid),grid(igrid)%boundary
      enddo
    endif
    close(100)

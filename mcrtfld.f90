@@ -124,7 +124,7 @@ module mcrtfld
 
   vol=dx*dy*dz
 
-   call get_boundary(igrid,b,active)
+   call get_boundary(igrid,b)
 
    rho0=cons(1,igrid)
 
@@ -275,7 +275,7 @@ module mcrtfld
 !$OMP&REDUCTION(max:maxT)
   do igrid=1,ngrid
 
-   if(grid(igrid)%anchor)cycle
+   if(grid(igrid)%boundary>0)cycle
    x0=grid(igrid)%x;y0=grid(igrid)%y;z0=grid(igrid)%z
 
    T=p(igrid)/(scl%rgas*cons(1,igrid))*muc_array(igrid)
@@ -397,7 +397,7 @@ module mcrtfld
      tau=zero
      do while(lum>lumlimit)
        igrid=get_grid_indx(x,y,z)
-       if(grid(igrid)%anchor)exit
+       if(grid(igrid)%boundary>0)exit
        if(igrid>ngrid)then
          print *, "Major problem.  igrid>ngrid",igrid,ngrid
          stop
@@ -441,7 +441,7 @@ module mcrtfld
 !$OMP BARRIER
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:coolrate) PRIVATE(ekin,eps)
   do igrid=1,ngrid
-   if(grid(igrid)%anchor)cycle
+   if(grid(igrid)%boundary>0)cycle
    if(cons(1,igrid)<rho_timestep)cycle
    
    ekin=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
@@ -464,7 +464,7 @@ module mcrtfld
 !$OMP BARRIER
 !$OMP DO SCHEDULE(STATIC) PRIVATE(ekin,eps) REDUCTION(+:totraden)
   do igrid=1,ngrid
-   if(grid(igrid)%anchor)cycle
+   if(grid(igrid)%boundary>0)cycle
    ekin=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
    eps=max(cons(5,igrid)-ekin+divflux(igrid)*tcool,small_eps)
    totraden=totraden+divflux(igrid)*vol

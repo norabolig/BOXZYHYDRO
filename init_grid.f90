@@ -3,7 +3,9 @@ subroutine init_grid
  use grid_commons
  implicit none
  
- integer:: igrid,iz,ibound,ix,iy
+ integer:: igrid,iz,ibound,ix,iy,ibound2
+ integer::flag1ix,flag1iy,flag1iz,flag2ix,flag2iy,flag2iz
+ integer::flag1,flag2,flag
  real(pre)::x,y,z,r
 
  ngrid=nx*ny*nz
@@ -28,31 +30,38 @@ subroutine init_grid
  max_den_change_old=one
  max_den_old=zero
 
- igrid=1
- id_grid_center=0
+ nbound=0
+ nghost=0
+ nanchor=0
+
+ igrid=0
  do iz=1,nz
+  flag1iz=0; if ((iz==1).or.(iz==nz))flag1iz=1
+  flag2iz=0; if ((iz==2).or.(iz==nz-1))flag2iz=1
   z=dz*(dble(iz)-(dble(nz)+one)/two)
   do iy=1,ny
+    flag1iy=0; if ((iy==1).or.(iy==ny))flag1iy=1
+    flag2iy=0; if ((iy==2).or.(iy==ny-1))flag2iy=1
     y=dy*(dble(iy)-(dble(ny)+one)/two)
     do ix=1,nx
+      flag1ix=0; if ((ix==1).or.(ix==nx))flag1ix=1
+      flag2ix=0; if ((ix==2).or.(ix==nx-1))flag2ix=1
       x=dx*(dble(ix)-(dble(nx)+one)/two)
+
+      igrid=igrid+1
  
-      if(iz==1.or.iz==nz)then
-        grid(igrid)%boundary=.true.
-        grid(igrid)%anchor=.true.
+      grid(igrid)%boundary=0
+      flag1=flag1iz+flag1ix+flag1iy
+      flag2=flag2iz+flag2ix+flag2iy
+      if(flag1>0)then
+        grid(igrid)%boundary=1
         nbound=nbound+1
-      elseif(iy==1.or.iy==ny)then
-        grid(igrid)%boundary=.true.
-        grid(igrid)%anchor=.true.
-        nbound=nbound+1
-      elseif(ix==1.or.ix==nx)then
-        grid(igrid)%boundary=.true.
-        grid(igrid)%anchor=.true.
-        nbound=nbound+1
-      else
-        grid(igrid)%boundary=.false.
-        grid(igrid)%anchor=.false.
+        nghost=nghost+1
+      elseif(flag2>0)then
+        grid(igrid)%boundary=2
+        nghost=nghost+1
       endif
+ 
       grid(igrid)%id=igrid
       grid(igrid)%ix=ix
       grid(igrid)%iy=iy
@@ -60,34 +69,40 @@ subroutine init_grid
       grid(igrid)%x=x
       grid(igrid)%y=y
       grid(igrid)%z=z
-!      if(mod(igrid,10)==0)then
- !       grid(igrid)%anchor=.true.
- !     else
-!        grid(igrid)%anchor=.false.
- !     endif
-      igrid=igrid+1
    enddo
   enddo
  enddo
 
+
  allocate(indx_bound(nbound))
  print *, "Allocated ",nbound," boundary cells"
+ allocate(indx_ghost(nghost))
+ print *, "Allocated ",nghost," ghost cells"
 
-
-
-#ifdef EXTRAANCHORS
- anchorradius=max(nx*dx,ny*dy)
- anchorradius=max(anchorradius,nz*dz)*half
+#ifdef EXTRAANCHORS ! create a bullet as an example
+ anchorradius=5*dx
 
  nanchor=0
  do igrid=1,ngrid
-    x=grid(igrid)%x
-    y=grid(igrid)%y
+    x=grid(igrid)%x-10*dx
+   y=grid(igrid)%y
     z=grid(igrid)%z
     r=sqrt(x*x+y*y+z*z)
-    if (r>anchorradius)then
+    flag=0
+    if (r<anchorradius)then
+      if (y>-anchorradius)flag=1
+    else
+      if (y>-anchorradius)then
+        if (x>-20.*dx .and. x<0.)then
+          if (y< anchorradius)then
+              flag=1
+          endif
+        endif
+      endif
+    endif
+    if (flag==1)then
       nanchor=nanchor+1
-      grid(igrid)%anchor=.true.
+      grid(igrid)%boundary=3
     endif    
  enddo
  print *, nanchor,dble(nanchor)/dble(ngrid)
@@ -95,7 +110,7 @@ subroutine init_grid
 
  ibound=0
  do igrid=1,ngrid
-    if(grid(igrid)%anchor)then
+    if(grid(igrid)%boundary>2)then
         ibound=ibound+1
         indx_anchor(ibound)=igrid
     endif
@@ -103,55 +118,77 @@ subroutine init_grid
  
 #endif
 
+
  ibound=0
+ ibound2=0
  do igrid=1,ngrid
-   if(grid(igrid)%boundary)then
+   if(grid(igrid)%boundary==1)then
      ibound=ibound+1
      indx_bound(ibound)=igrid
+     ibound2=ibound2+1
+     indx_ghost(ibound2)=igrid
+ 
      ix=grid(igrid)%ix
      iy=grid(igrid)%iy
      iz=grid(igrid)%iz
      grid(igrid)%ineigh(:)=0
 
-     if(ix==1)then
-       grid(igrid)%ineigh(1)=grid(igrid)%id+nx
-       grid(igrid)%ineigh(2)=grid(igrid)%id-nx
-       grid(igrid)%ineigh(4)=grid(igrid)%id-1
-       if(iy==1)grid(igrid)%ineigh(2)=0
-       if(iy==ny)grid(igrid)%ineigh(1)=0
+     if(ix==1)then ! always store the boundary donor in neighbor 1
+        grid(igrid)%ineigh(1)=grid(igrid)%id+2
      elseif(ix==nx)then
-       grid(igrid)%ineigh(1)=grid(igrid)%id+nx
-       grid(igrid)%ineigh(2)=grid(igrid)%id-nx
-       grid(igrid)%ineigh(3)=grid(igrid)%id+1
-       if(iy==1)grid(igrid)%ineigh(2)=0
-       if(iy==ny)grid(igrid)%ineigh(1)=0
+        grid(igrid)%ineigh(1)=grid(igrid)%id-2
      elseif(iy==1)then
-       grid(igrid)%ineigh(1)=grid(igrid)%id+nx
-       grid(igrid)%ineigh(3)=grid(igrid)%id+1
-       grid(igrid)%ineigh(4)=grid(igrid)%id-1
-       if(ix==1)grid(igrid)%ineigh(3)=0
-       if(ix==nx)grid(igrid)%ineigh(4)=0
+       grid(igrid)%ineigh(1)=grid(igrid)%id+2*nx
      elseif(iy==ny)then
-       grid(igrid)%ineigh(2)=grid(igrid)%id-nx
-       grid(igrid)%ineigh(3)=grid(igrid)%id+1
-       grid(igrid)%ineigh(4)=grid(igrid)%id-1
-       if(ix==1)grid(igrid)%ineigh(3)=0
-       if(ix==nx)grid(igrid)%ineigh(4)=0
+       grid(igrid)%ineigh(1)=grid(igrid)%id-2*nx
+     elseif(iz==1)then
+       grid(igrid)%ineigh(1)=grid(igrid)%id+2*nx*ny
+     elseif(iz==nz)then
+       grid(igrid)%ineigh(1)=grid(igrid)%id-2*nx*ny
+     else
+       print *," Error. Grid boundary is not really a boundary."
+       stop"Forced stop in init_grid"
      endif
-     if(iz/=1)grid(igrid)%ineigh(5)=grid(igrid)%id+nx*ny
-     if(iz/=nz)grid(igrid)%ineigh(6)=grid(igrid)%id-nx*ny
-     cycle
-   endif
+   elseif(grid(igrid)%boundary==2)then
+     ibound2=ibound2+1
+     indx_ghost(ibound2)=igrid
+     ix=grid(igrid)%ix
+     iy=grid(igrid)%iy
+     iz=grid(igrid)%iz
+     grid(igrid)%ineigh(:)=0
 
-   grid(igrid)%ineigh(1)=grid(igrid)%id+nx
-   grid(igrid)%ineigh(2)=grid(igrid)%id-nx
-   grid(igrid)%ineigh(3)=grid(igrid)%id+1
-   grid(igrid)%ineigh(4)=grid(igrid)%id-1
-   grid(igrid)%ineigh(5)=grid(igrid)%id+nx*ny
-   grid(igrid)%ineigh(6)=grid(igrid)%id-nx*ny
+     if(ix==2)then ! always store the boundary donor in neighbor 1
+        grid(igrid)%ineigh(1)=grid(igrid)%id+1
+     elseif(ix==nx-1)then
+        grid(igrid)%ineigh(1)=grid(igrid)%id-1
+     elseif(iy==2)then
+       grid(igrid)%ineigh(1)=grid(igrid)%id+nx
+     elseif(iy==ny-1)then
+       grid(igrid)%ineigh(1)=grid(igrid)%id-nx
+     elseif(iz==2)then
+       grid(igrid)%ineigh(1)=grid(igrid)%id+nx*ny
+     elseif(iz==nz-1)then
+       grid(igrid)%ineigh(1)=grid(igrid)%id-nx*ny
+     else
+       print *," Error. Grid boundary is not really a boundary."
+       stop"Forced stop in init_grid"
+     endif
+
+ 
+   else
+
+    grid(igrid)%ineigh(1)=grid(igrid)%id+nx
+    grid(igrid)%ineigh(2)=grid(igrid)%id-nx
+    grid(igrid)%ineigh(3)=grid(igrid)%id+1
+    grid(igrid)%ineigh(4)=grid(igrid)%id-1
+    grid(igrid)%ineigh(5)=grid(igrid)%id+nx*ny
+    grid(igrid)%ineigh(6)=grid(igrid)%id-nx*ny
+   endif
+   !if(grid(igrid)%boundary>0)print *, "BOUNDARY NEIGHBOR",igrid,ix,grid(igrid)%ineigh(1)
  
  enddo
  
+
  end subroutine
 
  subroutine first_touch()
@@ -171,7 +208,7 @@ subroutine init_grid
    grid(igrid)%ix=zero
    grid(igrid)%iy=zero
    grid(igrid)%iz=zero
-   grid(igrid)%boundary=.false. 
+   grid(igrid)%boundary=0
    phi(igrid)=zero
    p(igrid)=zero
    adindx(igrid)=zero

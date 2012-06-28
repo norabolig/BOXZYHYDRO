@@ -2,7 +2,7 @@ program sdxy
  implicit none
 
  integer,parameter::pre=8
- integer::nx=128,ny=128,nz=128,ix,iy,iz,idown,icheck=1234
+ integer::nx=100,ny=200,nz=8,ix,iy,iz,idown,icheck=1234
  !real(pre)::dx=0.678d0,dy=0.678,dz=0.678d0
  real(pre)::dx=0.125d0,dy=0.125d0,dz=0.125d0
 

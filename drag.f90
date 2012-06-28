@@ -22,14 +22,14 @@ module drag
   integer::ig(8)
     call get_nearest_8(x,y,z,ig) ! 1-3 are low
     if(ig(1)<1.or.ig(1)>ngrid.or. &
-       grid(ig(1))%boundary.or. &
-       grid(ig(2))%boundary.or. &
-       grid(ig(3))%boundary.or. &
-       grid(ig(4))%boundary.or. &
-       grid(ig(5))%boundary.or. & 
-       grid(ig(6))%boundary.or. &
-       grid(ig(7))%boundary.or. &
-       grid(ig(8))%boundary)then
+       grid(ig(1))%boundary>0.or. &
+       grid(ig(2))%boundary>0.or. &
+       grid(ig(3))%boundary>0.or. &
+       grid(ig(4))%boundary>0.or. &
+       grid(ig(5))%boundary>0.or. & 
+       grid(ig(6))%boundary>0.or. &
+       grid(ig(7))%boundary>0.or. &
+       grid(ig(8))%boundary>0)then
        print *, "Removing Particle :", ipart,ig(1),x,y,z
        part(ipart)%active=.false.
        cycle
@@ -86,14 +86,14 @@ module drag
 
     call get_nearest_8(x,y,z,ig) ! 1-3 are low
     if(ig(1)<1.or.ig(1)>ngrid.or. &
-       grid(ig(1))%boundary.or. &
-       grid(ig(2))%boundary.or. &
-       grid(ig(3))%boundary.or. &
-       grid(ig(4))%boundary.or. &
-       grid(ig(5))%boundary.or. & 
-       grid(ig(6))%boundary.or. &
-       grid(ig(7))%boundary.or. &
-       grid(ig(8))%boundary)then
+       grid(ig(1))%boundary>0.or. &
+       grid(ig(2))%boundary>0.or. &
+       grid(ig(3))%boundary>0.or. &
+       grid(ig(4))%boundary>0.or. &
+       grid(ig(5))%boundary>0.or. & 
+       grid(ig(6))%boundary>0.or. &
+       grid(ig(7))%boundary>0.or. &
+       grid(ig(8))%boundary>0)then
        print *, "Removing Particle :", ipart,ig(1),x,y,z
        part(ipart)%active=.false.
        cycle
@@ -249,14 +249,14 @@ module drag
 
     call get_nearest_8(x,y,z,ig) ! 1-3 are low
     if(ig(1)<1.or.ig(1)>ngrid.or. &
-       grid(ig(1))%boundary.or. &
-       grid(ig(2))%boundary.or. &
-       grid(ig(3))%boundary.or. &
-       grid(ig(4))%boundary.or. &
-       grid(ig(5))%boundary.or. & 
-       grid(ig(6))%boundary.or. &
-       grid(ig(7))%boundary.or. &
-       grid(ig(8))%boundary)then
+       grid(ig(1))%boundary>0.or. &
+       grid(ig(2))%boundary>0.or. &
+       grid(ig(3))%boundary>0.or. &
+       grid(ig(4))%boundary>0.or. &
+       grid(ig(5))%boundary>0.or. & 
+       grid(ig(6))%boundary>0.or. &
+       grid(ig(7))%boundary>0.or. &
+       grid(ig(8))%boundary>0)then
        print *, "Removing Particle :", ipart,ig(1),x,y,z
        part(ipart)%active=.false.
        cycle
@@ -401,14 +401,14 @@ module drag
 
     call get_nearest_8(x,y,z,ig) ! 1-3 are low
     if(ig(1)<1.or.ig(1)>ngrid.or. &
-       grid(ig(1))%boundary.or. &
-       grid(ig(2))%boundary.or. &
-       grid(ig(3))%boundary.or. &
-       grid(ig(4))%boundary.or. &
-       grid(ig(5))%boundary.or. & 
-       grid(ig(6))%boundary.or. &
-       grid(ig(7))%boundary.or. &
-       grid(ig(8))%boundary)then
+       grid(ig(1))%boundary>0.or. &
+       grid(ig(2))%boundary>0.or. &
+       grid(ig(3))%boundary>0.or. &
+       grid(ig(4))%boundary>0.or. &
+       grid(ig(5))%boundary>0.or. & 
+       grid(ig(6))%boundary>0.or. &
+       grid(ig(7))%boundary>0.or. &
+       grid(ig(8))%boundary>0)then
        print *, "Removing Particle :", ipart,ig(1),x,y,z
        part_direct(ipart)%active=.false.
        cycle

@@ -6,12 +6,11 @@ subroutine avisc
  implicit none
 
  integer :: igrid,b(6)
- logical :: active
 
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
-   call get_boundary(igrid,b,active)
-   if(active)then
+   if(grid(igrid)%boundary>0)then
+       call get_boundary(igrid,b)
        qq(1,igrid)=avmagx*min(zero,u(1,b(3))-u(1,b(4)))**2
        qq(2,igrid)=avmagy*min(zero,u(2,b(1))-u(2,b(2)))**2
        qq(3,igrid)=avmagz*min(zero,u(3,b(5))-u(3,b(6)))**2

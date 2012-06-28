@@ -2,7 +2,7 @@ subroutine source
  use parameters
  use derived_types
  use grid_commons
- use utils, only : get_boundary_anchor, get_boundary_wb,get_polar,calc_gforce
+ use utils, only : get_boundary, get_boundary_wb,get_polar,calc_gforce,set_ghost_cells
 #ifdef PARTICLE
  use particle
 #endif
@@ -40,8 +40,8 @@ subroutine source
 
  do igrid=1,ngrid
 
-  call get_boundary_anchor(igrid,b,active)
-  if(grid(igrid)%anchor)cycle
+  call get_boundary(igrid,b)
+  if(grid(igrid)%boundary>0)cycle
 
     x=grid(igrid)%x;y=grid(igrid)%y+yoffset;r=sqrt(x*x+y*y)
 
@@ -112,8 +112,7 @@ subroutine source
 
  do igrid=1,ngrid
 
-    !call get_boundary(igrid,b,active)
-    if(grid(igrid)%anchor)cycle
+    if(grid(igrid)%boundary>0)cycle
 
     ux=u(1,igrid)
     uy=u(2,igrid)
@@ -154,15 +153,8 @@ subroutine source
 !$OMP ENDDO
 #endif
 
-!$OMP DO SCHEDULE(STATIC)
- do igrid=1,nbound
-  cons(1,indx_bound(igrid))=small_rho
-  cons(2,indx_bound(igrid))=zero 
-  cons(3,indx_bound(igrid))=zero 
-  cons(4,indx_bound(igrid))=zero 
-  cons(5,indx_bound(igrid))=small_eps
- enddo
-!$OMP ENDDO
+ call set_ghost_cells()
+
 #endif
 
 end subroutine

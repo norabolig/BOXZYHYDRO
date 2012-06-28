@@ -1,9 +1,9 @@
 module grid_commons
  use parameters
  use derived_types
- integer::nhex,ngrid,nbound,id_grid_center,ccol,nanchor
+ integer::nhex,ngrid,nbound,id_grid_center,ccol,nghost,nanchor
 
- integer,dimension(:),allocatable::indx_bound,column_number,indx_anchor
+ integer,dimension(:),allocatable::indx_bound,column_number,indx_ghost,indx_anchor
 
  real(pre)::dt,time
  real(pre),dimension(:),allocatable::p,adindx,muc_array

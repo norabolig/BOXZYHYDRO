@@ -17,7 +17,6 @@ subroutine courant
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:max_den,dtrate)  &
 !$OMP PRIVATE(s1,s2,s3,s4,r1,r2,r0,sound2)
  do igrid=1,ngrid
-  if(grid(igrid)%boundary)cycle
   sound2=(adindx(igrid)*p(igrid)/cons(1,igrid))/(dx*dx+dy*dy+dz*dz)
 
   s1=(u(1,igrid)/dx)**2

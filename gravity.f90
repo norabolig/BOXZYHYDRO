@@ -147,7 +147,7 @@ subroutine init_grav_grid
      ileaf= grav_grid(inode+iskip)%ichild(ichild)
      if(ileaf==0)then
        grav_grid(inode+iskip)%ichild(ichild)=igrid
-       if(grid(igrid)%boundary)then
+       if(grid(igrid)%boundary==1)then
           grav_grid(inode+iskip)%boundary=.true.
        endif
        nleaf=nleaf+1
@@ -457,7 +457,7 @@ subroutine get_pot_bc_from_tree
 #if 1 == 0
 !$OMP DO SCHEDULE(dynamic)
   do igrid=1,ngrid,10
-   if(grid(igrid)%boundary)cycle
+   if(grid(igrid)%boundary==1)cycle
    !print *, "Entering grid object ",igrid 
    phi_loc=zero
    x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
@@ -883,7 +883,7 @@ end function
       else
         do ichild=1,nchild
          indx=grav_grid(id)%ichild(ichild)
-         if(grid(indx)%boundary)cycle
+         if(grid(indx)%boundary==1)cycle
          phi0=project_phi_from_coarse(ilevel,id,iskip,grid(indx)%x,grid(indx)%y,grid(indx)%z)
          phi(indx)=phi0
         enddo
@@ -974,8 +974,8 @@ end function
   do while (iter<maxiter)
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:maxerr)
    do igrid=1,ngrid
-     if(grid(igrid)%boundary)cycle
-     call get_boundary_wb(igrid,b,active) 
+     if(grid(igrid)%boundary==1)cycle
+     call get_boundary_wb(igrid,b) 
 
       resid=( (phi(b(1))+phi(b(2)))*dx*dz/dy+(phi(b(3))+phi(b(4)))*dy*dz/dx &
            +(phi(b(5))+phi(b(6)))*dx*dy/dz &
@@ -992,7 +992,7 @@ end function
    maxerr_loc=maxerr
 !$OMP DO  SCHEDULE(STATIC) 
    do igrid=1,ngrid
-     if(grid(igrid)%boundary)cycle ! don't change the boundary or anchor  potential!
+     if(grid(igrid)%boundary==1)cycle ! don't change the boundary or anchor  potential!
        phi(igrid)=phi_new(igrid)!phi(igrid)+((alpha)*phi_new(igrid)) ! subtract residual
    enddo
 !$OMP ENDDO
@@ -1050,8 +1050,8 @@ end function
 !$OMP BARRIER
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:maxerr)
    do igrid=1,ngrid
-     if(grid(igrid)%boundary)cycle
-     call get_boundary_wb(igrid,b,active) 
+     if(grid(igrid)%boundary==1)cycle
+     call get_boundary_wb(igrid,b) 
 
       resid=( (phi(b(1))+phi(b(2)))*dx*dz/dy+(phi(b(3))+phi(b(4)))*dy*dz/dx &
            +(phi(b(5))+phi(b(6)))*dx*dy/dz &
@@ -1068,7 +1068,7 @@ end function
    maxerr_loc=maxerr
 !$OMP DO  SCHEDULE(STATIC) 
    do igrid=1,ngrid
-     if(grid(igrid)%boundary)cycle ! don't change the boundary or anchor  potential!
+     if(grid(igrid)%boundary==1)cycle ! don't change the boundary or anchor  potential!
        phi(igrid)=phi_new(igrid)!phi(igrid)+((alpha)*phi_new(igrid)) ! subtract residual
    enddo
 !$OMP ENDDO

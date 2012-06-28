@@ -20,6 +20,7 @@ module parameters
  real(pre)::dz=0.25d0
  real(pre)::yoffset=0.d0
  logical::fluxangmom=.false.
+ logical::no_out_flow=.false.
 
  !eos parameters
  real(pre)::mu_z=16.78d0

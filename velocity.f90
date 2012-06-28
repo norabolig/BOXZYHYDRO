@@ -10,18 +10,13 @@ subroutine velocity
  maxv=zero
 !$OMP DO SCHEDULE(STATIC) PRIVATE(ekin,flag)
  do igrid=1,ngrid
-   if(grid(igrid)%anchor)then
-    u(1:3,igrid)=zero
-   else
     do idim=1,3
        u(idim,igrid)=cons(idim+1,igrid)/cons(1,igrid)
     enddo
-  endif
  enddo
 !$OMP ENDDO
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:maxv) PRIVATE(ekin,flag,speed)
  do igrid=1,ngrid
-  if(grid(igrid)%anchor)cycle
   flag=0
   do idim=1,3
    maxv=max(maxv,abs(u(idim,igrid)))
