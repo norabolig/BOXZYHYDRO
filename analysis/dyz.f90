@@ -2,9 +2,10 @@ program sdxy
  implicit none
 
  integer,parameter::pre=8
- integer::nx=128,ny=128,nz=64,ix,iy,iz,idown,icheck=1234
+ integer::nx=128,ny=128,nz=128,ix,iy,iz,idown,icheck=1234
  !real(pre)::dx=0.678d0,dy=0.678,dz=0.678d0
- real(pre)::dx=0.250d0,dy=0.25000,dz=0.25000d0
+ real(pre)::dx=1d0,dy=1d0,dz=1d0
+ integer::offsetx=0
 
  character*72:: filename,input!="../celldump.00003750 "
  real(pre)::deltax,deltaz,h,lhex,xmin,xmax,ymin,ymax,zmin,zmax,pi,vol,dist,val,xx,yy,mass
@@ -147,19 +148,19 @@ program sdxy
 
  nentryxy=nentry/nx
 
- allocate(XIM(nx))
- allocate(YIM(ny))
+ allocate(XIM(ny))
+ allocate(YIM(nz))
  allocate(sig(nentryxy))
- allocate(image(nx,ny))
+ allocate(image(ny,nz))
 
  
- print *, '#nrntry, nentryxy, nx ny nz, nx ny, ', nentry, nentryxy, nx*ny*nz, nx*ny
+ print *, '#nrntry, nentryxy, nx ny nz, nz ny, ', nentry, nentryxy, nx*ny*nz, nz*ny
 
  iter=0
  sig=0d0
  ixs=0
 ! do idx=1,nz 
-idx=nx/2
+idx=nx/2+offsetx
    do iz=1,nz
    do iy=1,ny
      iter=(iz-1)*nx*ny+(iy-1)*nx+idx

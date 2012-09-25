@@ -2,16 +2,16 @@ program sdxy
  implicit none
 
  integer,parameter::pre=8
- integer::nx=140,ny=120,nz=120,ix,iy,iz,idown,icheck=1234
- integer::iselect=70
- real(pre)::ds=0.125d0,dz=0.125d0
- real(pre)::rholmt=1d-7
+ integer::nx=128,ny=128,nz=128,ix,iy,iz,idown,icheck=1234
+ !real(pre)::dx=0.678d0,dy=0.678,dz=0.678d0
+ real(pre)::dx=1d0,dy=1d0,dz=1d0
+ integer::offsetx=0
 
  character*72:: filename,input!="../celldump.00003750 "
- real(pre)::deltax,deltaz,h,lhex,dx,dy,xmin,xmax,ymin,ymax,zmin,zmax,pi,vol,dist,val,xx,yy,mass
- real(pre)::phase,area,val2,time,yval,yval2,fac
- real(pre),dimension(:),allocatable::x,y,z,rho,p,vx,vy,vz,phi,sort,muc_array,eps
- real(pre),dimension(:),allocatable::XIM,YIM,sig,ysig
+ real(pre)::deltax,deltaz,h,lhex,xmin,xmax,ymin,ymax,zmin,zmax,pi,vol,dist,val,xx,yy,mass
+ real(pre)::phase,area,val2,time
+ real(pre),dimension(:),allocatable::x,y,z,rho,p,vx,vy,vz,phi,sort,eps,muc_array
+ real(pre),dimension(:),allocatable::XIM,YIM,sig
  integer,dimension(:),allocatable::indx_sort,boundary
  real(pre),dimension(:,:),allocatable::image
  character junk
@@ -27,18 +27,7 @@ program sdxy
  
  type(units)::scl 
 
- xmax=45.
- xmin=-45.
- ymax=45.
- ymin=-45.
- 
-
  pi=acos(-1d0)
- deltax=0.25
- deltaz=0.25
- area=1.5d0*deltax**2*tan(pi/6d0)
- vol=area*deltaz
- h=4*deltax
 
  call getarg(1,filename)
  idx1=iargc()
@@ -49,6 +38,7 @@ program sdxy
  call getarg(2,input)
  read(input,"(L)")binary
 
+ nentry=0
  if (binary)then
 
    open(unit=100,file=trim(filename),form="UNFORMATTED")
@@ -60,7 +50,7 @@ program sdxy
    read(100)time,ihead
    read(100)scl
    ioerr=0
-   do while (ioerr>-1)
+   do while (ioerr==0)
      read(100,iostat=ioerr)
      nentry=nentry+1
    enddo
@@ -74,11 +64,10 @@ program sdxy
    ihead=1
    nentry=0
    do while (ioerr>-1)
-     if(ihead<2)then
+     if(ihead<3)then
         read(100,"(A1)")junk
         ihead=ihead+1
      endif
-     read(100,'(A,1X,8(1pe15.8,1X))')junk,scl
      read(100,"(A1)",iostat=ioerr)
      nentry=nentry+1
    enddo
@@ -92,9 +81,9 @@ program sdxy
  allocate(y(nentry))
  allocate(z(nentry))
  allocate(rho(nentry))
- allocate(p(nentry))
  allocate(eps(nentry))
  allocate(muc_array(nentry))
+ allocate(p(nentry))
  allocate(vx(nentry))
  allocate(vy(nentry))
  allocate(vz(nentry))
@@ -102,10 +91,10 @@ program sdxy
  allocate(boundary(nentry))
  allocate(indx_sort(nentry))
 
-! if(nentry/=ny*nx*nz)then
-!   print *, 'ordering off. check dimensions and entry ',nx*ny*nz,nentry," diff ",nx*ny*nz-nentry
-!   stop
-! endif
+ if(nentry/=ny*nx*nz)then
+   print *, 'ordering off. check dimensions and entry ',nx*ny*nz,nentry," diff ",nx*ny*nz-nentry
+   stop
+ endif
  
  if(binary)then
    read(100)ihead
@@ -140,8 +129,9 @@ program sdxy
    do ix=1,nx
    do iy=1,ny
      iter=iter+1
-     read(100,"(9(1pe16.8e3,1X),I2)")x(iter),y(iter),z(iter),rho(iter),p(iter),&
+     read(100,"(11(1pe16.8e3,1X),I2)")x(iter),y(iter),z(iter),rho(iter),p(iter),&
         vx(iter),vy(iter),vz(iter),phi(iter),eps(iter),muc_array(iter),boundary(iter)
+
      indx_sort(iter)=iter
      sort(iter)=x(iter)
      if(xmax<x(iter))xmax=x(iter)
@@ -156,58 +146,42 @@ program sdxy
  endif
  close(100)
 
-
  nentryyz=nentry/nx
 
  allocate(XIM(ny))
  allocate(YIM(nz))
  allocate(sig(nentryyz))
- allocate(ysig(nentryyz))
+ allocate(image(ny,nz))
 
- dx=ds*cos(pi/6d0)
- dy=ds
- !dz=(zmax-zmin)/dble(nz)
  
- print *, '#nrntry, nentryyz, nx ny nz, nx ny, ', nentry, nentryyz, nx*ny*nz, nz*ny
+ print *, '#nrntry, nentryyz, nx ny nz, ny nz, ', nentry, nentryyz, nx*ny*nz, ny*nz
 
  iter=0
  sig=0d0
- ysig=0d0
-
-
  ixs=0
- ix=iselect
- do iy=1,ny 
+! do idx=1,nz 
+idx=nx/2+offsetx
    do iz=1,nz
-     iter=(iz-1)*ny*nx+ny*(ix-1)+iy
+   do iy=1,ny
+     iter=(iz-1)*nx*ny+(iy-1)*nx+idx
      ixs=ixs+1
-     sig(ixs)=p(iter)/rho(iter)/scl%rgas*muc_array(iter)
+     sig(ixs)=sig(ixs)+p(iter)/(rho(iter)*scl%rgas)*muc_array(iter)
    enddo
- enddo 
+   enddo
+! enddo 
 
  print *,"#", xmin,xmax,ymin,ymax,zmin,zmax
  do iter=1,ny
-  XIM(iter)=( dble(iter-1) *dy -(dble(ny)/2d0-0.5d0)*dy)
+  XIM(iter)=( dble(iter-1) *dy -(dble(nx)/2d0-0.5d0)*dy)
  enddo
  do iter=1,nz
   YIM(iter)=( dble(iter-1) *dz -(dble(nz)/2d0-0.5d0)*dz)
  enddo
 
- do ipix=1,ny
-  do jpix=1,nz
-    ientry=(ipix-1)*nz+jpix
-    idown =(ipix-1)*nz+max(1,jpix-1)
-!    if(mod(ipix,2)==0)then
-!       val=sig(ientry)
-!       yval=ysig(ientry)
-!       val2=sig(idown)
-!       yval2=ysig(idown)
-!       val = val + (val2-val)*.5d0
-!       yval = yval + (yval2-yval)*.5d0
-!    else
-       val=sig(ientry)
-!    endif
-    print *, XIM(ipix),YIM(jpix),val
+ do jpix=1,nz
+  do ipix=1,ny
+    ientry=(jpix-1)*ny+ipix
+    print *, XIM(ipix),YIM(jpix),sig(ientry)
  enddo
 enddo
  
@@ -215,116 +189,5 @@ enddo
 
  contains
 
- real(pre) function kernel(d)
-   implicit none
-   real(pre)::q,d
-   q=d/h
-  if (q<1.)then
-    kernel=1.+(-1.5*q+.75*q*q)*q
-  else if (q<2.)then
-    kernel=.25*(2.-q)**3
-  else
-    kernel=0.
-  endif
-  kernel=kernel*10./(7.*pi*h**2)
-  return
- end function
-
 end program
-
-SUBROUTINE quick_sort(list, order, n)
-  
-  ! Quick sort routine from:
-  ! Brainerd, W.S., Goldberg, C.H. & Adams, J.C. (1990) "Programmer's Guide to
-  ! Fortran 90", McGraw-Hill  ISBN 0-07-000248-7, pages 149-150.
-  ! Modified by Alan Miller to include an associated integer array which gives
-  ! the positions of the elements in the original order.
-  
-  IMPLICIT NONE
-  INTEGER :: n
-  integer,parameter::pre=8
-  REAL(pre), DIMENSION (1:n), INTENT(INOUT)  :: list
-  INTEGER, DIMENSION (1:n), INTENT(OUT)  :: order
-  
-  ! Local variable
-  INTEGER :: i
-  
-  DO i = 1, n
-     order(i) = i
-  END DO
-  
-  CALL quick_sort_1(1, n)
-  
-CONTAINS
-  
-  RECURSIVE SUBROUTINE quick_sort_1(left_end, right_end)
-    
-    INTEGER, INTENT(IN) :: left_end, right_end
-    
-    !     Local variables
-    INTEGER             :: i, j, itemp
-    REAL(pre)              :: reference, temp
-    INTEGER, PARAMETER  :: max_simple_sort_size = 6
-    
-    IF (right_end < left_end + max_simple_sort_size) THEN
-       ! Use interchange sort for small lists
-       CALL interchange_sort(left_end, right_end)
-       
-    ELSE
-       ! Use partition ("quick") sort
-       reference = list((left_end + right_end)/2)
-       i = left_end - 1; j = right_end + 1
-       
-       DO
-          ! Scan list from left end until element >= reference is found
-          DO
-             i = i + 1
-             IF (list(i) >= reference) EXIT
-          END DO
-          ! Scan list from right end until element <= reference is found
-          DO
-             j = j - 1
-             IF (list(j) <= reference) EXIT
-          END DO
-          
-          
-          IF (i < j) THEN
-             ! Swap two out-of-order elements
-             temp = list(i); list(i) = list(j); list(j) = temp
-             itemp = order(i); order(i) = order(j); order(j) = itemp
-          ELSE IF (i == j) THEN
-             i = i + 1
-             EXIT
-          ELSE
-             EXIT
-          END IF
-       END DO
-       
-       IF (left_end < j) CALL quick_sort_1(left_end, j)
-       IF (i < right_end) CALL quick_sort_1(i, right_end)
-    END IF
-    
-  END SUBROUTINE quick_sort_1
-  
-  
-  SUBROUTINE interchange_sort(left_end, right_end)
-    
-    INTEGER, INTENT(IN) :: left_end, right_end
-    
-    !     Local variables
-    INTEGER             :: i, j, itemp
-    REAL(pre)              :: temp
-    
-    DO i = left_end, right_end - 1
-       DO j = i+1, right_end
-          IF (list(i) > list(j)) THEN
-             temp = list(i); list(i) = list(j); list(j) = temp
-             itemp = order(i); order(i) = order(j); order(j) = itemp
-          END IF
-       END DO
-    END DO
-    
-  END SUBROUTINE interchange_sort
-  
-END SUBROUTINE quick_sort
 
