@@ -1,3 +1,6 @@
+!
+! Define variables for global memory
+!
 module grid_commons
  use parameters
  use derived_types

@@ -1,3 +1,6 @@
+!
+! Specify the units for the simulation
+!
 subroutine get_units(scale)
  use parameters
  use derived_types

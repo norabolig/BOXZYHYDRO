@@ -1,3 +1,7 @@
+!
+! Simple cooling laws.  Under construction.
+!
+!
 module coolinglaws
  use parameters
  use derived_types
@@ -8,15 +12,21 @@ module coolinglaws
  real(pre)::scale_kappa
 
  contains
-
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get opacity
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  real(pre) function get_kappa(T)
    real(pre),intent(in)::T
    get_kappa=(T/64d0)**.5d0*scale_kappa
    !get_kappa=.33d0*scale_kappa
  end function
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+! get local divergence of the flux estimate.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine get_local_divflux()
    real(pre):: sigmaSBcode,dl,vol,opacfac,fluxfac,tirr,ebgrnd,dflux
    real(pre)::T,kappa,dtau,coolTime,lum
@@ -43,8 +53,8 @@ module coolinglaws
      kappa=get_kappa(T)
      dtau=kappa*cons(1,igrid)*dl
         
-    ekin=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
-    eps=max(cons(5,igrid)-ekin,small_eps)
+     ekin=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
+     eps=max(cons(5,igrid)-ekin,small_eps)
  
      tau_fac=dtau+one/dtau
      dflux=fluxfac*sigmaSBcode*((T)**4-(tirr)**4)/(dl*tau_fac)
@@ -60,7 +70,6 @@ module coolinglaws
 !$OMP ENDDO
 !$OMP END PARALLEL
    print *, "Luminosity at time ",lum,time
-   
   end subroutine
 end module
   

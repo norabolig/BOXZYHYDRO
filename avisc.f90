@@ -1,3 +1,6 @@
+!
+! Add artificial viscosity to the grid. Not in use at the moment
+!
 subroutine avisc
  use parameters
  use derived_types
@@ -7,7 +10,7 @@ subroutine avisc
 
  integer :: igrid,b(6)
 
-!$OMP DO SCHEDULE(STATIC)
+!$OMP DO SCHEDULE(STATIC) PRIVATE(b)
  do igrid=1,ngrid
    if(grid(igrid)%boundary>0)then
        call get_boundary(igrid,b)

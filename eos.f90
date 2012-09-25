@@ -1,11 +1,12 @@
-module eos
-! Written by A. C. Boley (updated 19 Nov 2010)
+! Written by Nora Bolig (updated 19 Nov 2010)
 ! See Pathria for questions.  This uses E=NkT^2 d ln Z /d T to calculate internal energies.
 ! However, the zero point energies are subtracted out (relevant for orthohydrogen
 ! and for the vibrational states).  The 16.78 in the metals
 ! term is from cameron 1968. This takes into account rotational states for 
 ! hydrogen and 1 vibrational state. zp is the parahydrogen partition function
 ! and dzpdt and ddzpdtt are its derivatives, *e for equilibrium, and *o for ortho.
+! Updated again throughout 2011.  Now contains dissociation of molecular hydrogen.
+module eos
  use parameters
  use derived_types
  use grid_commons
@@ -19,6 +20,11 @@ module eos
 
  contains
 
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Initialize the EOS, including all tables.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    subroutine initialize_eos()
 
      call get_units(scl)
@@ -41,11 +47,19 @@ module eos
      allocate(deng_eos_array(NEOS_RHO))
 
    end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Clean up memory.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    subroutine clean_eos()
      deallocate(gamma_table,tk_table,eng_table,gamma_table2,eng_table2,tk_table2,muc_table,muc_table2,rho_table)
    end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Full partition function for H2, excluding translation.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    subroutine h2_partition(t,zp,zo,ze,zoprime,dzpdt,dzodt,dzedt,dzoprimedt)
      real(pre),intent(in)::t
      real(pre),intent(out)::zp,zo,ze,zoprime,dzpdt,dzodt,dzedt,dzoprimedt
@@ -75,19 +89,31 @@ module eos
      dzedt=dzpdt+dzodt
      return
    end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! General function for translational partition function
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    real(pre) function translate(m,t,n)
      real(pre)::m,t,n
      translate=eul*(sqrt(two*pi*m*mp*kB*t/hplanck**2))**3/n
      return
    end function
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Debroglie wavelength
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    real(pre) function debroglie(m,t)
      real(pre)::m,t
      debroglie=hplanck/sqrt(two*pi*m*mp*kB*t)
      return
    end function
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Main function for generating the EOS tables.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    subroutine calc_eos_table()
      real(pre)::t0,tm,tp,denm,denp,den0,logdenp,logdenm,logden0
      real(pre)::logt0,logtm,gamu=zero,gaml=zero,xdiss,apot
@@ -104,8 +130,13 @@ module eos
      eul=exp(one)
    
      muc = one/(xabun*half + yabun*quarter + zabun/mu_z)
+!
+!
+#ifdef VERBOSE
      print *, "muc is:", muc
-
+#endif
+!
+!
      allocate(sent(NEOS_T,NEOS_RHO))
      allocate(xdiss_a(NEOS_T))
 
@@ -116,11 +147,12 @@ module eos
      do i = 1,NEOS_RHO
        rho_table(i)=ten**(log_rho_eos_low+dble(i-1)*drho_eos)
      enddo
-     !log_rho_eos_low=log_rho_eos_low-log10(scl%density)
-     !drho_eos=drho_eos-log10(scl%density)
-
-! we've done the easy part.  Now we need to make the large table. Same idea, but must be done for each rho and for each
-
+!
+!***
+! we've done the easy part.  Now we need to make the large table. 
+! Same idea, but must be done for each rho and for each.
+!***
+!
      do irho=1,NEOS_RHO
        den=rho_table(irho)
        nh=xabun*den/(mp)
@@ -129,7 +161,7 @@ module eos
        nz=zabun*den/(mu_z*mp)
     
        select case(H2STAT)
-       case(0)
+       case(0) ! fixed ortho-para ratio
          do itk=1,NEOS_T
            tk=tk_table(itk) 
            trans_he=one
@@ -156,9 +188,9 @@ module eos
               - log(one-exp(-vib/tk))) ) + yabun*0.25d0*log(trans_he) + zabun*log(trans_z)/mu_z)
            sent(itk,irho)=(eng_table(itk,irho)-apot)/tk
          enddo
-
-       case(1)
-
+!
+       case(1) ! equilibrium ratio
+!
          do itk=1,NEOS_T
            tk=tk_table(itk) 
            trans_he=one
@@ -185,8 +217,9 @@ module eos
               - log(one-exp(-vib/tk))) ) + yabun*0.25d0*log(trans_he) + zabun*log(trans_z)/mu_z)
            sent(itk,irho)=(eng_table(itk,irho)-apot)/tk
          enddo
-       case(-1)
-         !print *, "Single gamma.  Generating table for completeness, but it is not used."
+!
+       case(-1) ! Single gamma.  Generating table for completeness, but it is not used.
+!
          do itk =1,NEOS_T
            tk=tk_table(itk) 
            eng_table(itk,irho)=rgasCGS*tk/(gammafix-one)/muc
@@ -200,12 +233,15 @@ module eos
          muc_table(itk,irho)=(one/(xabun*(one-half*xdiss_a(itk)) + yabun*0.25d0 + zabun/mu_z))
        enddo
      enddo ! loop over density 
-
-     ! This part is a pain, but it is a straight-forward way to derive the adiabatic index
+!
+!***
+! This part is a pain, but it is a straight-forward way to derive the adiabatic index
+!***
+!
      if(H2STAT>=0)then
      do irho=1,NEOS_RHO
-       irhop=irho+1
-       irhom=irho-1
+       irhop=min(irho+1,NEOS_RHO)
+       irhom=max(irho-1,1)
        den0=rho_table(irho)
        logden0=log(den0)
        denm=rho_table(irhom)
@@ -262,7 +298,6 @@ module eos
             logt0=log(t0)
             logtm=log(tm)
             tp=logtm-(s1-s0)*(logt0-logtm)/(s2-s0)
-            !if(s0<s3.and.s3<s2)then
             if(s1<s0.and.s0<s3)then
               gam=one+(tp-logtm)/(logden0-logdenm)
             else
@@ -335,11 +370,14 @@ module eos
        enddo
      enddo
      endif
-
+!
+!
 #ifdef VERBOSE
+  print *, "H2STAT set to ",H2STAT
   print *, "#EOS table initialized.  XABUN, YABUN, ZABUN, MU_Z, MUC ",xabun,yabun,zabun,mu_z,muc
 #endif
-
+!
+!
      gamma_table(:,1)=gamma_table(:,2)
      gamma_table(:,NEOS_RHO)=gamma_table(:,NEOS_RHO-1)
      do irho=1,NEOS_RHO
@@ -371,7 +409,17 @@ module eos
      deallocate(sent)
 
    end subroutine calc_eos_table
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! The following functions are used to interpolate from the tables
+! to find the appropriate quantites.  Sometimes the lookup is done
+! starting from the energy, but it can also use temperature. In tables
+! without a number, the standard lookup is done in energy space.
+! For functions with a number 2, the lookup is done in temperature space.
+! The first of these does not take the density as an argument, and instead
+! takes the density column integer.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    subroutine get_gamma_norho(eng,tk,m,gam,irho)
     real(pre)::eng,tk,gam,m
     integer::ientry,jump,flag,inext,irho
@@ -415,10 +463,12 @@ module eos
      /(eng_table(ientry+1,irho)-eng_table(ientry,irho))*(eng-eng_table(ientry,irho))
    m=muc_table(ientry,irho)+(muc_table(ientry+1,irho)-muc_table(ientry,irho)) &
      /(eng_table(ientry+1,irho)-eng_table(ientry,irho))*(eng-eng_table(ientry,irho))
-
-
    end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get gamma from energy
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    subroutine get_gamma(eps,rho,tk,m,gam)
     real(pre)::eng,tk,gam,eps,rho,m
     integer::ientry,jump,flag,inext,irho
@@ -468,10 +518,12 @@ module eos
      /(eng_table(ientry+1,irho)-eng_table(ientry,irho))*(eng-eng_table(ientry,irho))
    m=muc_table(ientry,irho)+(muc_table(ientry+1,irho)-muc_table(ientry,irho)) &
      /(eng_table(ientry+1,irho)-eng_table(ientry,irho))*(eng-eng_table(ientry,irho))
-
-
    end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get gamma from energy with temperature spacing
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    subroutine get_gamma2(eps,rho,tk,m,gam)
     real(pre)::eng,tk,gam,eps,rho,m
     integer::ientry,irho
@@ -502,7 +554,11 @@ module eos
             /(eng_table2(ientry+1,irho)-eng_table2(ientry,irho))*(eng-eng_table2(ientry,irho))
 
    end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get gamma from temperature.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    subroutine get_gamma_from_tk(eps,rho,tk,m,gam)
     real(pre)::tk,gam,eps,rho,m
     integer::ientry,irho
@@ -519,7 +575,11 @@ module eos
     m=(muc_table(ientry,irho)+(muc_table(ientry+1,irho)-muc_table(ientry,irho))/dTK_eos*(tk-tk_table(ientry)))
 
    end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get gamma from pressure
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
    subroutine get_gamma_from_p(eps,rho,p_loc,m,gam)
     real(pre)::p_loc,gam,eps,rho,m
     integer::ientry,jump,flag,inext,irho,i,irhop,irho0
@@ -567,7 +627,6 @@ module eos
       endif
     enddo
    if(flag>1)then
-     !print *, p_loc,p_table(NEOS,irho),rho*scl%density,irho,log_rho_eos_low,(log10(rho*scl%density)-log_rho_eos_low)/drho_eos
      p_loc=p_table(NEOS,irho)
    elseif(flag>0)then
      p_loc=p_table(1,irho)
@@ -601,8 +660,6 @@ module eos
      gam=gam0
    endif 
 
-   end subroutine
-
-
+  end subroutine
 
 end module

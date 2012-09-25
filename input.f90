@@ -1,3 +1,6 @@
+!
+! Get input using the namelist file
+!
 module input
  use parameters
  implicit none

@@ -1,13 +1,25 @@
+!
+! A collection of a variety of functions and routines for the code
+!
 module utils
  use parameters
  use derived_types
  implicit  none
-
+!
+!***
+! These variables need to be shared for reduction methods in parallelized loops
+!***
+!
+ real(pre)::mass,eint,ekin,etot,egra,amom,momx,momy,momz,xcom,ycom,zcom
  real(pre),save::xcom0,ycom0,zcom0
  logical,save::comfirst=.true.
 
  contains
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Find the grid index for a given x,y,z
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  integer function get_grid_indx(x,y,z)
    use grid_commons
    real(pre)::x,y,z
@@ -31,7 +43,11 @@ module utils
    get_grid_indx=igrid
 
  end function
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get cell neighbors, excluding boundary cells.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine get_boundary(igrid,b)
   use derived_types
   use grid_commons
@@ -39,13 +55,35 @@ module utils
   integer, intent(out)::b(6)
   integer::idx
 
-  do idx=1,6
-   b(idx)=grid(igrid)%ineigh(idx)
-   if(grid(b(idx))%boundary>0)b(idx)=igrid
-  enddo
+   do idx=1,6
+    b(idx)=grid(igrid)%ineigh(idx)
+    if(grid(b(idx))%boundary>0)b(idx)=igrid
+   enddo
 
  end subroutine get_boundary
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get cell neighbors, excluding boundary and anchor cells.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ subroutine get_boundary_noanchor(igrid,b)
+  use derived_types
+  use grid_commons
+  integer, intent(in)::igrid
+  integer, intent(out)::b(6)
+  integer::idx
 
+   do idx=1,6
+    b(idx)=grid(igrid)%ineigh(idx)
+    if(grid(b(idx))%boundary>2)b(idx)=igrid
+   enddo
+
+ end subroutine get_boundary_noanchor
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get cell neighbors, including boundary cells.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine get_boundary_wb(igrid,b)
   use derived_types
   use grid_commons
@@ -59,7 +97,11 @@ module utils
   enddo
 
  end subroutine get_boundary_wb
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get nearest 8 cells for a random x,y,z position
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine get_nearest_8(x,y,z,neigh)
   use grid_commons
   integer::igrid,igridt
@@ -70,6 +112,10 @@ module utils
   real(pre)::delz
 
   igrid=get_grid_indx(x,y,z)
+  if(grid(igrid)%boundary>0)then
+      neigh=-1
+      return
+  endif 
   call get_boundary(igrid,bb)
 
   delz=z-grid(igrid)%z
@@ -126,24 +172,145 @@ module utils
    endif
   
  end subroutine
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get grid ID for a cell with indexes ix,iy,iz
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ integer function get_id(ix,iy,iz)
+  integer,intent(in)::ix,iy,iz
+  get_id=ix+(iy-1)*nx+(iz-1)*nx*ny
+ end function
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Check whether a boundary cell is near a corner of the domain.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ integer function check_corner(ix,iy,iz,ineigh)
+  integer,intent(in)::ix,iy,iz
+  integer::ineigh
 
- subroutine set_ghost_cells()
+  if (ix<3) then
+    if (iy<3) then
+      if (iz<3)then; ineigh=get_id(3,3,3)
+      elseif(iz>nz-2)then; ineigh=get_id(3,3,nz-2)
+      else; ineigh=get_id(3,3,iz)
+      endif
+    else if (iy>ny-2) then
+      if (iz<3)then; ineigh=get_id(3,ny-2,3)
+      elseif(iz>nz-2)then; ineigh=get_id(3,ny-2,nz-2)
+      else; ineigh=get_id(3,ny-2,iz)
+      endif
+    else 
+      if (iz<3)then; ineigh=get_id(3,iy,3)
+      elseif(iz>nz-2)then; ineigh=get_id(3,iy,nz-2)
+      endif
+    endif
+  else if (ix>nx-2) then
+    if (iy<3) then
+      if (iz<3)then; ineigh=get_id(nx-2,3,3)
+      elseif(iz>nz-2)then; ineigh=get_id(nx-2,3,nz-2)
+      else; ineigh=get_id(nx-2,3,iz)
+      endif
+    else if (iy>ny-2) then
+      if (iz<3)then; ineigh=get_id(nx-2,ny-2,3)
+      elseif(iz>nz-2)then; ineigh=get_id(nx-2,ny-2,nz-2)
+      else; ineigh=get_id(nx-2,ny-2,iz)
+      endif
+    else 
+      if (iz<3)then; ineigh=get_id(nx-2,iy,3)
+      elseif(iz>nz-2)then; ineigh=get_id(nx-2,iy,nz-2)
+      endif
+    endif
+  else 
+    if (iy<3) then
+      if (iz<3)then; ineigh=get_id(ix,3,3)
+      elseif(iz>nz-2)then; ineigh=get_id(ix,3,nz-2)
+      endif
+    else if (iy>ny-2) then
+      if (iz<3)then; ineigh=get_id(ix,ny-2,3)
+      elseif(iz>nz-2)then; ineigh=get_id(ix,ny-2,nz-2)
+      endif
+    endif
+  endif
+
+  check_corner=ineigh
+ end function
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Set ghost cells using the pointer variables
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ subroutine set_ghost_cells_pt()
   use grid_commons
-  integer::igrid,idx,idim,ineigh
+  use eos, only : get_gamma_from_tk
+  integer::igrid,idx,idim,ineigh,ix,iy,iz
+  real(pre)::v,eps,adloc,mucloc
+  type(units)::scale
 
-!$OMP DO SCHEDULE(STATIC) PRIVATE(idx,ineigh)
+  call get_units(scale) ! units.f90
+
+!$OMP DO SCHEDULE(STATIC) PRIVATE(idx,ineigh,eps,mucloc,adloc,ix,iy,iz)
   do igrid=1,nghost
     idx=indx_ghost(igrid)
+    ix=grid(idx)%ix
+    iy=grid(idx)%iy
+    iz=grid(idx)%iz
     ineigh=grid(idx)%ineigh(1)
+    ineigh=check_corner(ix,iy,iz,ineigh)
+
     do idim=1,5
-      cons(idim,idx)=cons(idim,ineigh)
-    enddo
-    do idim=1,3
-      u(idim,idx)=u(idim,ineigh)
+      cons_pt(idim,idx)=cons_pt(idim,ineigh)
     enddo
   enddo
 !$OMP ENDDO
+!
+!
+#ifdef EXTRAANCHORS
+!$OMP DO SCHEDULE(STATIC) PRIVATE(idx)
+  do igrid=1,nanchor
+    idx=indx_anchor(igrid)
+    cons_pt(1,idx)=small_rho
+    cons_pt(2,idx)=zero
+    cons_pt(3,idx)=zero
+    cons_pt(4,idx)=zero
+    cons_pt(5,idx)=small_eps
+  enddo
+!$OMP ENDDO
+#endif /* end ifdef EXTRAANCHORS */
+!
+!
+ end subroutine
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Set ghost cells 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ subroutine set_ghost_cells()
+  use grid_commons
+  use eos, only : get_gamma_from_tk
+  integer::igrid,idx,idim,ineigh,ix,iy,iz
+  real(pre)::v,eps,ploc,mucloc,adloc
+  type(units)::scale
 
+  call get_units(scale) ! units.f90
+
+!$OMP DO SCHEDULE(STATIC) PRIVATE(idx,ineigh,eps,mucloc,adloc,ix,iy,iz)
+  do igrid=1,nghost
+    idx=indx_ghost(igrid)
+    ix=grid(idx)%ix
+    iy=grid(idx)%iy
+    iz=grid(idx)%iz
+    ineigh=grid(idx)%ineigh(1)
+    ineigh=check_corner(ix,iy,iz,ineigh)
+
+    do idim=1,5
+      cons(idim,idx)=cons(idim,ineigh)
+    enddo
+  enddo
+!$OMP ENDDO
+!
+!
 #ifdef EXTRAANCHORS
 !$OMP DO SCHEDULE(STATIC) PRIVATE(idx)
   do igrid=1,nanchor
@@ -153,17 +320,21 @@ module utils
     cons(3,idx)=zero
     cons(4,idx)=zero
     cons(5,idx)=small_eps
-    u(1:3,idx)=zero
   enddo
 !$OMP ENDDO
-#endif
+#endif /* end ifdef EXTRAANCHORS */
+!
+!
 
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Calculate gravitational force from grid.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine calc_gforce()
   use grid_commons
   integer::igrid,b(6)
-  logical::active
 
 !$OMP DO SCHEDULE(STATIC) &
 !$OMP&PRIVATE(b)
@@ -176,9 +347,12 @@ module utils
     gforce(3,igrid)=-(phi(b(5))-phi(b(6)))/(two*dz)
   enddo
 !$OMP ENDDO
-
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get polar angle. Like atan2.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine get_polar(r,an,x,y)
   real(pre),intent(in)::x,y
   real(pre),intent(out)::r,an
@@ -201,13 +375,23 @@ module utils
 
   return
  end subroutine get_polar
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Flux limiter for hydro fluxing.  It is set to MINMOD always,
+! but can be changed.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  real(pre) function flux_limiter(a,b,c,d)
    real(pre),intent(in)::a,b,c,d
    real(pre)::r,den
+!
+!
 #define MINMOD
-
+!
+!
    flux_limiter=zero
+!
+!
 #ifdef VANLEER
      den=(c-d)
      if(den==zero)then 
@@ -216,7 +400,9 @@ module utils
      endif
      r=(a-b)/den
      flux_limiter = (r+abs(r))/(one+abs(r)) 
-#endif
+#endif /* end ifdef VANLEER */
+!
+!
 #ifdef VANALDABADA1
      den=(c-d)
      if(den==zero)then 
@@ -226,7 +412,9 @@ module utils
      r=(a-b)/den
      if(r<zero)r=zero
      flux_limiter = (r*r + r)/(r*r + one)
-#endif
+#endif /* end ifdef VANALDABADA1 */
+!
+!
 #ifdef SUPERBEE
      den=(c-d)
      if(den==zero)then 
@@ -245,7 +433,9 @@ module utils
      else
        flux_limiter=two
      endif
-#endif
+#endif /* end ifdef SUPERBEE */
+!
+!
 #ifdef MINMOD 
      den=(c-d)
      if(den==zero)then 
@@ -254,9 +444,15 @@ module utils
      endif
      r=(a-b)/den
      flux_limiter = max(zero,min(r,one))
-#endif
+#endif /* end ifdef MINMOD (DEFAULT */
+!
+!
  end function
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Upwind fluxing
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  real(pre) function upwind(f2,f1,f0,fm1,v,ds,t)
    real(pre),intent(in)::f2,f1,f0,fm1,v,ds,t
    real(pre)::limit,nu
@@ -271,7 +467,11 @@ module utils
    endif
 
  end function
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Left and Right states for central differencing.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine left_right_states(f2,f1,f0,fm1,left,right)
    real(pre),intent(in)::f2,f1,f0,fm1
    real(pre),intent(out)::left,right
@@ -284,31 +484,11 @@ module utils
    left =  f0+limit*half*(f1-f0)
 
  end subroutine
-
-!.....Translate cvmgp and cvmgz into equivalent if statements
- real(pre) FUNCTION SLOPE(a,b,c)
-  real(pre):: a,b,c,tmp,tmm
-  slope=zero
-  if ((b-c)*(a-b) < zero) return
-   tmm=a-c
-  if (tmm.eq.0.0) return
-   slope=(b-c)*(a-b)/tmm*two
-  return
- end  function 
-
-!*******************************************************************************
-!.........and van leer interpolation
- real(pre) FUNCTION VLI(qf,qb,slopf,slopb,vel,dt,ds)
-  real(pre):: qf,qb,slopf,slopb,vel,dt,ds
-  if(vel.lt.zero) then 
-    vli=qf-(ds+vel*dt)*slopf/(two*ds)
-  else 
-    vli=qb+(ds-vel*dt)*slopb/(two*ds)
-  endif
-  return
- end  function
-
-!!!! From CHYMERA
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Another function like atan2
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
       real(pre) function getAngle(x,y) 
        real(pre),intent(in):: x,y
        if(x==0d0)then
@@ -333,20 +513,21 @@ module utils
        endif  
        return 
       end function getAngle
-
-      !!!!!!!!!!!!!!!!!!!!!!!
-      ! radial part of Kepler
-      !!!!!!!!!!!!!!!!!!!!!!!
- 
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! radial part of Kepler
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
       real(pre) function radialCoorKep(a,ee,tAnom)
        real(pre),intent(in)::a,ee,tAnom
        radialCoorKep=a*(1d0-ee**2)/(1d0+ee*cos(tAnom))
        return
       end function radialCoorKep
-    
-      !!!!!!!!!!!!!!!!!!!!!!!!
-      ! Solve Kepler's problem
-      !!!!!!!!!!!!!!!!!!!!!!!! 
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    
+! Solve Kepler's problem
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
       subroutine trueAnomaly(tt,mu,a,ee,theta,eAnom)
        real(pre),intent(in)::tt,mu,a,ee
        real(pre),intent(out)::theta,eAnom
@@ -373,14 +554,14 @@ module utils
        theta=two*getAngle(sqrt(one-ee)*cos(eAnom*half),sqrt(one+ee)*sin(eAnom*half))
        return
       end subroutine trueAnomaly
-
-
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!! This routine calculates the position of a wide-orbit binary.
-!!!
-!!! For the position of the binary, only consider r and phi because
-!!! we are still in mirror symmetry land for the disk. 
-      subroutine getBinaryPosition(tt,rBin,thetaBin,omegaBin, &
+! This routine calculates the position of a wide-orbit binary.
+! For the position of the binary, only consider r and phi because...
+! Work in progress and is not used.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+subroutine getBinaryPosition(tt,rBin,thetaBin,omegaBin, &
      &  massDisk,muBin,abin,ebin,massbin)
       implicit none
       real(pre),intent(in)::tt,massDisk,abin,ebin
@@ -393,10 +574,12 @@ module utils
 
       call trueAnomaly(tBin,muBin,aBin,eBin,thetaBin,eAnom)
       rBin=radialCoorKep(aBin,eBin,thetaBin)
-      !!print *, "GetBINARY",tBin,muBin,omegaBin,rBin,thetaBin,massDisk
       return
       end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Maximum magnitude function
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
  real(pre) function magmax(a,b)
    real(pre),intent(in)::a,b
@@ -407,13 +590,20 @@ module utils
         magmax=b
      endif
  end function
-
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Maximum magnitude of three variables
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  real(pre) function magmax3(a,b,c)
    real(pre),intent(in)::a,b,c
      magmax3=magmax(magmax(a,b),c)
  end function
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Spectral radius function for Jacobian solver
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  real(pre) function get_spectral_radius_from_flux_jacobian(var,v,igrid,idim)
    real(pre),intent(in)::var(:,:),v(:,:)
    real(pre)::jac(3,3),l(3)
@@ -429,7 +619,11 @@ module utils
      get_spectral_radius_from_flux_jacobian=abs(magmax3(l(1),l(2),l(3)))
    endif
  end function
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Eigen values of a 3X3 matrix
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine matrix3_eigen(l,a,flag)
    real(pre),intent(in)::a(3,3)
    real(pre),intent(out)::l(3)
@@ -467,7 +661,11 @@ module utils
    endif
 
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Jacobian
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine flux_jacobian(var,v,idim,b,jac)
    real(pre)::var(:,:),v(:,:)
    integer,intent(in)::idim
@@ -515,7 +713,12 @@ module utils
    if(.not.du==zero)jac(3,3)=df/du
 
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Suppress grid drift by forcing the COM of the entire domain to be
+! at the center of the grid.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine suppress_drift(xcom,ycom,zcom)
   use grid_commons
   use parameters
@@ -550,6 +753,65 @@ module utils
  zcom0=zcom
 !$OMP END MASTER
 
+ end subroutine
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Check how we are doing with conserving quantities when applicable. 
+! Check drift of COM.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ subroutine conservation_diagnostic()
+   use grid_commons
+   real(pre)::x,y,z,angle
+   integer::igrid
+   mass=zero
+   eint=zero
+   ekin=zero
+   etot=zero
+   egra=zero
+   amom=zero
+   momx=zero
+   momy=zero
+   xcom=zero
+   ycom=zero
+   zcom=zero
+!$OMP DO SCHEDULE(STATIC) REDUCTION(+:mass,ekin,eint,amom,momx)        &
+!$OMP&REDUCTION(+:momy,momz,etot,egra,xcom,ycom,zcom)
+   do igrid=1,ngrid
+    if(grid(igrid)%boundary>0)cycle
+    x=grid(igrid)%x
+    y=grid(igrid)%y
+    z=grid(igrid)%z
+    angle=atan2(y,x)
+    amom=amom+(cons(3,igrid)*cos(angle)-cons(2,igrid)*sin(angle))&
+        *sqrt(x**2+y**2)*dx*dy*dz
+    momx=momx+cons(2,igrid)*dz*dx*dy
+    momy=momy+cons(3,igrid)*dz*dx*dy
+    momz=momz+cons(4,igrid)*dz*dx*dy
+    mass=mass+cons(1,igrid)*dz*dx*dy
+    xcom=xcom+x*cons(1,igrid)*dz*dx*dy
+    ycom=ycom+y*cons(1,igrid)*dz*dx*dy
+    zcom=zcom+z*cons(1,igrid)*dz*dx*dy
+    etot=etot+(cons(5,igrid))*dz*dx*dy
+    ekin=ekin+(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2) &
+        /(two*cons(1,igrid))*dx*dy*dz
+    egra=egra+half*(cons(1,igrid)*phi(igrid))*dx*dy*dz
+   enddo
+!$OMP ENDDO
+!$OMP BARRIER
+!
+!
+#ifdef VERBOSE
+!$OMP MASTER
+  print *," Total mass   is ",mass,time
+  print *," Total momx,y,z is ",momx,momy,momz,time
+  print *," Total amom   is ",amom,time
+  print *," Total energy is ",etot+egra,etot,etot-ekin,ekin,egra,time
+  print *,"COM ",time,xcom/mass,ycom/mass,zcom/mass
+!$OMP END MASTER
+#endif /* end ifdef VERBOSE */
+!
+!
  end subroutine
 
 end module

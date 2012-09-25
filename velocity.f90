@@ -1,3 +1,6 @@
+!
+! Get velocity from conservative variables
+!
 subroutine velocity
  use parameters
  use derived_types
@@ -7,14 +10,21 @@ subroutine velocity
  real(pre)::ekin,speed
  integer :: igrid,idim,flag
 
+!$OMP MASTER
  maxv=zero
-!$OMP DO SCHEDULE(STATIC) PRIVATE(ekin,flag)
+!$OMP END MASTER
+!$OMP BARRIER
+!
+!$OMP DO SCHEDULE(STATIC) 
  do igrid=1,ngrid
     do idim=1,3
        u(idim,igrid)=cons(idim+1,igrid)/cons(1,igrid)
     enddo
  enddo
 !$OMP ENDDO
+!
+!$OMP BARRIER
+!
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:maxv) PRIVATE(ekin,flag,speed)
  do igrid=1,ngrid
   flag=0
@@ -22,6 +32,7 @@ subroutine velocity
    maxv=max(maxv,abs(u(idim,igrid)))
    if(abs(u(idim,igrid))>vlimit)flag=1
   enddo
+!
   if(flag==1)then
      ekin=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
      speed=zero
@@ -37,12 +48,17 @@ subroutine velocity
      ekin=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
      cons(5,igrid)=max(cons(5,igrid),small_eps)+ekin
   endif
+!
  enddo
 !$OMP ENDDO
+!
+!
 #ifdef VERBOSE
+!$OMP BARRIER
 !$OMP MASTER
- print *, "# maxv: ",maxv
+ print *, " maxv: ",maxv
 !$OMP END MASTER
-#endif
-
+#endif /* end ifdef VERBOSE */
+!
+!
 end subroutine

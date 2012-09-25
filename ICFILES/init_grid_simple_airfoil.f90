@@ -1,8 +1,5 @@
 !
-! Initialize the grid.  Most of this will not need to be modified.
-! The only section that needs to be touched is if an anchor-cell 
-! distribution is desired.  That will eventually go into a 
-! a separate file.
+! Initialize grid file with anchor cells that form a simple airfoil.
 !
 subroutine init_grid
  use parameters
@@ -11,9 +8,8 @@ subroutine init_grid
  
  integer:: igrid,iz,ibound,ix,iy,ibound2
  integer::flag1ix,flag1iy,flag1iz,flag2ix,flag2iy,flag2iz
- integer::flag1,flag2,flag,ineigh
+ integer::flag1,flag2,flag
  real(pre)::x,y,z,r,mslope,ael,bel,length,x0,aoa,xp,yp
- real(pre)::caf,paf,taf,maf,xc,xx,yt,yc,yu,yl,xu,xl,theta,dycdx,pc
 
  ngrid=nx*ny*nz
  print *,"# Total grid elements = ",ngrid
@@ -34,7 +30,7 @@ subroutine init_grid
 
  nullify(cons_pt)
 
- call first_touch() ! below
+ call first_touch()
 
  max_den_change_old=one
  max_den_old=zero
@@ -88,53 +84,35 @@ subroutine init_grid
  allocate(indx_ghost(nghost))
  print *, "Allocated ",nghost," ghost cells"
 
-!
-!***
-! The following is for setting anchors and obstructions on the grid.
-! The example below is for a sphere.
-!***
-!
-!
+! create a huge sphere
 #ifdef EXTRAANCHORS 
-  maf=0.02 ! arbitrary numbers at this point for the example
-  paf=0.4
-  caf=150.*dx
-  taf=0.12
-  aoa=-23d0*pi/180.
-
+ ael=40d0*dx
+ bel=15d0*dx
+ x0=-25.7*dx
+ length=110d0*dx
+ mslope=0.314422
+ nanchor=0
+ aoa=-0.*pi/180.
  do igrid=1,ngrid
-   xp=grid(igrid)%x
+   xp=grid(igrid)%x-75*dx
    yp=grid(igrid)%y
    z=grid(igrid)%z
 
-   x=xp*cos(aoa)-yp*sin(aoa)
+   x=xp*cos(aoa)+yp*sin(aoa)
    y=xp*sin(aoa)+yp*cos(aoa) 
 
-   xc=-(x-75*dx)
-
-   xx=xc/caf
-   yt=taf*caf/(0.2)*( 0.2969*sqrt(xx) + xx*(-0.1260+xx*(-0.3516 + xx*(0.2843+xx*(-0.1015) ) ) ) )
-
-   pc=paf*caf
-   if (xc>=0. .and. xc <= pc)then
-     dycdx=2*maf/paf-2.*maf*xc/(paf*paf*caf)
-     yc=maf*xc/paf**2*(2*paf-xc/caf)
-   else
-     yc=maf*(caf-xc)/(1.-paf)**2*(1.+xc/caf-2.*paf)
-     dycdx=maf/(1.-paf)**2*(-(1.+xc/caf-2.*paf)+maf*(caf-xc)/caf)
-   endif
-
-   theta=atan(dycdx)
-   xu=xc-yt*sin(theta)
-   xl=xc+yt*sin(theta)
-   yu=yc+yt*cos(theta)
-   yl=yc-yt*cos(theta)
-
-   flag=0
-   if ( 0<= xc .and. xc <= caf )then
-      if(y<=yu.and.y>=yl)flag=1
-   endif 
-
+    r=sqrt(x*x+y*y)
+    flag=0
+    r=(x/ael)**2+(y/bel)**2
+    if (r<=one)then
+      flag=1
+    else
+      if (x>=-(length-x0).and.x<=zero) then
+        if(y>=-bel)then
+          if(y<=(-bel+mslope*(x+length)).and.y<(-bel+mslope*(x0+length)))flag=1
+        endif
+      endif
+    endif
     if (flag==1)then
       nanchor=nanchor+1
       grid(igrid)%boundary=3
@@ -150,11 +128,10 @@ subroutine init_grid
         indx_anchor(ibound)=igrid
     endif
  enddo
-!
-! 
-#endif /* end ifdef EXTRAANCHORS */
-!
-!
+ 
+#endif
+
+
  ibound=0
  ibound2=0
  do igrid=1,ngrid
@@ -191,26 +168,26 @@ subroutine init_grid
      ix=grid(igrid)%ix
      iy=grid(igrid)%iy
      iz=grid(igrid)%iz
-     ineigh=0
-     grid(igrid)%ineigh(:)=ineigh
+     grid(igrid)%ineigh(:)=0
 
-     if(ix==2)then 
-       ineigh=grid(igrid)%id+1
+     if(ix==2)then ! always store the boundary donor in neighbor 1
+        grid(igrid)%ineigh(1)=grid(igrid)%id+1
      elseif(ix==nx-1)then
-       ineigh=grid(igrid)%id-1
+        grid(igrid)%ineigh(1)=grid(igrid)%id-1
      elseif(iy==2)then
-       ineigh=grid(igrid)%id+nx
+       grid(igrid)%ineigh(1)=grid(igrid)%id+nx
      elseif(iy==ny-1)then
-       ineigh=grid(igrid)%id-nx
+       grid(igrid)%ineigh(1)=grid(igrid)%id-nx
      elseif(iz==2)then
-       ineigh=grid(igrid)%id+nx*ny
+       grid(igrid)%ineigh(1)=grid(igrid)%id+nx*ny
      elseif(iz==nz-1)then
-       ineigh=grid(igrid)%id-nx*ny
+       grid(igrid)%ineigh(1)=grid(igrid)%id-nx*ny
+     else
+       print *," Error. Grid boundary is not really a boundary."
+       stop"Forced stop in init_grid"
      endif
 
-     grid(igrid)%ineigh(1)=ineigh
-
-
+ 
    else
 
     grid(igrid)%ineigh(1)=grid(igrid)%id+nx
@@ -220,16 +197,13 @@ subroutine init_grid
     grid(igrid)%ineigh(5)=grid(igrid)%id+nx*ny
     grid(igrid)%ineigh(6)=grid(igrid)%id-nx*ny
    endif
+   !if(grid(igrid)%boundary>0)print *, "BOUNDARY NEIGHBOR",igrid,ix,grid(igrid)%ineigh(1)
  
  enddo
+ 
+
  end subroutine
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! First touch principle.  This is for accelerating OpenMP by smartly
-! allocating memory. As the name implies, the trick is to touch the
-! arrays as soon as possible.
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
+
  subroutine first_touch()
   use parameters
   use grid_commons

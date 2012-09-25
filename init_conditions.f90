@@ -1,3 +1,7 @@
+!
+! Set up initial conditions for the simulations.
+! This setup is for a shock tube.  Modify as needed.
+!
 subroutine init_conditions()
  use parameters
  use derived_types
@@ -11,10 +15,13 @@ subroutine init_conditions()
  real(pre)::x,y,z
  
  call get_units(scale)
+!
+!***
 ! set your initial conditions here
 ! these initial conditions are for a sod shock tube test
 ! directions x, y, and z can be chosen below where indicated 
-
+!***
+!
 !$OMP DO SCHEDULE(STATIC) PRIVATE(x,y,z)
  do igrid=1,ngrid
   x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
@@ -64,8 +71,6 @@ do igrid=1,ngrid
  cons_old(5,igrid)=cons(5,igrid)
 enddo
 !$OMP ENDDO
- print *, "#Done with ICs"
+ print *, "Done with ICs"
 
 end subroutine 
-   
-

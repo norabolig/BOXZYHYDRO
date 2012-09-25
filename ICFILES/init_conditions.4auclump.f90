@@ -1,3 +1,8 @@
+!
+! Set up initial conditions for the simulations.
+! These ICs create a 4 AU poltyrope witn n=1.5
+! and total mass 10 Mjup.  Modify as needed.
+!
 subroutine init_conditions()
  use parameters
  use derived_types
@@ -9,42 +14,26 @@ subroutine init_conditions()
  
  type(units)::scale
 
- real(pre)::x,y,z,r,zi,rtrope=4d0,ekin,angle
- real(pre)::eps,rho,tk,gam,eng
- real(pre)::rpoly=4.50,kpoly=1.934d14,rhopoly=4.4e-10,jnpoly=3.10e18,r2
- real(pre)::structure_gamma=1.435d0
- real(pre)::hfitd= 0.000331409, &
-            gfitd= 2.64063e-05, &
-            ffitd=-0.000204844, &
-            efitd= 9.52241e-05, &
-            dfitd= -1.71391e-05,& 
-            cfitd= 1.10999e-06, &
+ real(pre)::x,y,z,r,zi,ekin,angle
+ real(pre)::eps,rho,tk,gam,eng,r2
+ real(pre)::rpoly=4.0,kpoly=8.055e13
+ real(pre)::structure_gamma=1.4d0
+
+ real(pre)::hfitd= 5.25d-10, &
+            gfitd= -3.56d-12, &
+            ffitd=-5.167d-10, &
+            efitd= 3.3d-10, &
+            dfitd= -7.89d-11,& 
+            cfitd= 6.67d-12, &
             bfitd=zero, &
             afitd=zero
 
-
-! real(pre)::afitd=0.0d0 , &
-!            bfitd=0.0d0, &
-!            cfitd=0.0d0,&
-!            dfitd=-0.146658d00, &
-!            efitd=0.332d0,&
-!            ffitd=-0.21174d0, &
-!            gfitd=-0.00206944d0, &
-!            hfitd=0.0277743d0
-!
- real(pre)::afitp=-0.0006826d0 , &
-            bfitp=0.00395d0, &
-            cfitp=-0.008202d0, &
-            dfitp=0.0080d0, &
-            efitp=-0.00376d0, &
-            ffitp=0.00065d0
-
-
-! fit is for r=1 and mass=10
-
  call get_units(scale)
+!
+!***
 ! set your initial conditions here
-
+!***
+!
 !$OMP DO SCHEDULE(STATIC) PRIVATE(x,y,z,tk,eps) 
  do igrid=1,ngrid
   x=grid(igrid)%x;y=grid(igrid)%y;z=abs(grid(igrid)%z)
@@ -54,14 +43,12 @@ subroutine init_conditions()
   r2=r
   angle=atan2(y,x)
   if (r < rpoly) then
-     cons(1,igrid)= max(((((((afitd*r2+bfitd)*r2+cfitd)*r2+dfitd)*r2+efitd)&
-                      *r2+ffitd)*r2+gfitd)*r2+hfitd,small_rho)
-     u(1:3,igrid)=zero
+     cons(1,igrid)= max( (((((((afitd*r2+bfitd)*r2+cfitd)*r2+dfitd)*r2+efitd)&
+                      *r2+ffitd)*r2+gfitd)*r2+hfitd)/scale%density,small_rho)
   else
    cons(1,igrid)=small_rho
-   cons(5,igrid)=small_eps
-   u(1:3,igrid)=zero
   endif
+  u(1:3,igrid)=zero
   ekin=half*(u(1,igrid)**2+u(2,igrid)**2+u(3,igrid)**2)*cons(1,igrid)
   p(igrid)=kpoly*(cons(1,igrid)*scale%density)**structure_gamma/scale%eps
   tk=p(igrid)/(cons(1,igrid)*scale%rgas)*muc
@@ -88,7 +75,7 @@ subroutine init_conditions()
  enddo
 !$OMP ENDDO NOWAIT
 
- call state()
+ call state() ! state.f90
 
  print *, "#Done with ICs"
 

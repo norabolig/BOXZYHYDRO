@@ -1,3 +1,7 @@
+!
+! Module for radiative transfer. This uses a combination of flux limited diffusion
+! and a particle/ray-tracing approach.
+!
 module mcrtfld
  use parameters
  use derived_types
@@ -8,41 +12,142 @@ module mcrtfld
 
  integer::nphottot=6
  integer::RANSEED(1)=314159
- integer::RANLENGTH=1000000
+ integer::RANLENGTH=50000
 
- integer::currentidx
- integer::iter_cool,maxiter=10
-
- real(pre)::taulimit=half
- real(pre)::taufac=one
- real(pre)::cfrac=0.25d0
- real(pre)::opac_scale=1.00d0
- real(pre),dimension(:),allocatable::divflux,ran_colat,ran_azimuth
- real(pre)::scale_kappa,sigmaSBcode,coolrate,cooltime,totraden,tcoolold
- real(pre)::rho_divflux_limit=1d-10,rho_timestep=1d-10,tau_stream_limit=1d-12
- real(pre)::lumlimit=1d-20
- real(pre)::r_follow_limit=10.0d0,r_follow_limit2
+ integer::currentidx,ran60_id
+ integer::iter_cool,maxiter=100
+!
+!
+#ifdef FLDONLY
+ real(pre)::taulimit=0.0d0
+#else
+ real(pre)::taulimit=1.0d20
+#endif /* end ifdef FLDONLY */
+!
+!
+ real(pre)::taufac=1d0
+ real(pre)::cfrac=0.1d0
+ real(pre)::opac_scale=1d0,taum=1d-1
+ real(pre),dimension(:),allocatable::divflux,ran_colat,ran_azimuth,ran_pm60
+ real(pre)::scale_kappa,sigmaSBcode,coolrate,cooltime,totraden,tcoolold,eold
+ real(pre)::rho_divflux_limit=1d-8,rho_timestep=1d-8,tau_stream_limit=1d-100
+ real(pre)::lumlimit=0d0
+ real(pre)::r_follow_limit=8d0,r_follow_limit2
  real(pre)::maxT,ds=zero
- logical:: central_print=.true.
+ logical:: central_print=.false.,print_iter=.true.
  
  type(units)::scl
 
  contains
-
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Move to the next id. Used for the Monte Carlo-like portion.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  integer function nextidx(i)
   integer,intent(in)::i
   nextidx=i+1
   if(nextidx>RANLENGTH)nextidx=1
  end function
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Interpolation function for the FLD and the free-streaming limits
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ real(pre) function expinterp(r,k,dy)
+   real(pre),intent(in)::r,k,dy
+      expinterp=exp(-three*(r*k*dy)**2)!*0.1d0)
+ end function
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Given an alignment along an x,y,z axis (idir), find a perturbed
+! angle for propagating a photon packet.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ subroutine get_angle_pert(az,co,idx,idir)
+   real(pre)::az,co,x,y,z,xp,yp,zp,cosaz,sinaz,cosco,sinco
+   integer::idx,idir
+
+   az=ran_azimuth(idx);idx=nextidx(idx)
+   co=ran_pm60(idx);idx=nextidx(idx)
+
+   cosco=cos(co)
+   sinco=sin(co)
+
+   cosaz=cos(az)
+   sinaz=sin(az)
+
+   x=sinco*cosaz
+   y=sinco*sinaz
+   z=cosco
+
+   xp=z;yp=y;zp=z
+   
+   select case(idir)
+
+   case(1)
+
+    xp=x
+    yp=z
+    zp=-y
+
+   case(2)
+
+    xp=x
+    yp=-z
+    zp=y
+
+   case(3)
+
+    xp=z
+    yp=y
+    zp=-x
+
+   case(4)
+
+    xp=-z
+    yp=y
+    zp=x
+ 
+   case(5)
+
+    xp=x
+    yp=y
+    zp=z
+
+   case(6)
+
+    xp=x
+    yp=y
+    zp=-z
+      
+   end select 
+
+   az=atan2(yp,xp)
+   co=acos(zp)
+
+   return
+
+ end subroutine
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get the opacity.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  real(pre) function get_kappa(T)
    real(pre),intent(in)::T
-!   get_kappa=(T/16d0)**.5d0*scale_kappa
-!   get_kappa=1d-1*scale_kappa
-!   return
+!
+!***
+! simplified opacity or testing. Uncomment if desired.
+!***
+!
+   get_kappa=1d0*scale_kappa*opac_scale
+   return
+!
+!***
 !     Pollack et al. (1994) rosseland opacities
-
+!***
+!
       if(T.lt.80.0) then
          get_kappa=(T**2)/3200.0
       else if(T.lt.170.0) then
@@ -73,44 +178,70 @@ module mcrtfld
       get_kappa=get_kappa*opac_scale*scale_kappa
 
  end function
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+! Get emission from a cell in free-streaming limit
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  real(pre) function get_luminosity(rho,kappa,T)
   real(pre),intent(in)::rho,kappa,T
   get_luminosity=four*sigmaSBcode*rho*kappa*T**4/dble(nphottot)
  end function
-
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Similar to above, but integrated through the cell. This is still in the
+! test phase and is not used.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ real(pre) function get_luminosity_2(rho,kappa,T,ds)
+  real(pre),intent(in)::rho,T,ds,kappa
+  real(pre)::exptau_loc
+  exptau_loc=exp(-rho*kappa*ds)
+  get_luminosity_2=four*sigmaSBcode*T**4*(one-exptau_loc) &
+      / (dble(nphottot)*ds)
+ end function
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Initialize variables and arrays for mcrtfld routine
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine initialize_mcrtfld()
   integer::i
   
   allocate(divflux(ngrid))
   allocate(ran_azimuth(RANLENGTH))
   allocate(ran_colat(RANLENGTH))
+  allocate(ran_pm60(RANLENGTH))
   call get_units(scl)
   scale_kappa=scl%mass/scl%length**2
   sigmaSBcode=5.67d-5/(scl%mass/scl%time**3)
   ds=sqrt(dx*dx+dy*dy+dz*dz)
-  !call random_seed(put=RANSEED)
-  !call ramdom_seed()
   call random_number(ran_colat)
   call random_number(ran_azimuth)
   do i=1,RANLENGTH
     ran_azimuth(i)=ran_azimuth(i)*two*pi
+    ran_pm60(i)=acos(half+half*ran_colat(i))
     ran_colat(i)=acos(one-two*ran_colat(i))
   enddo
   currentidx=1
   r_follow_limit2=r_follow_limit**2
 
  end subroutine
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+! Bodenheimer et al. 1990 flux limiter for FLD contribution
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  real(pre) function fluxlimiter(rk,T,dtds_mag)
    real(pre)::rk,T,dtds_mag,y
    y=four/(rk*T)*dtds_mag
    fluxlimiter=(two+y)/(six+y*(three+y))
  end function
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Flux-limited diffusion solution.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine fld(igrid,boundary_e)
   integer,intent(in)::igrid
   real(pre)::Ta,kappa0,rho0,dtds,dtds_mag,rgas_loc
@@ -144,9 +275,11 @@ module mcrtfld
    beta=fluxlimiter(rk,ta,dtds_mag)
 
    fyt=16d0*sigmaSBcode*beta*Ta**3*dtds/rk
-
+!
+!***
 !in2
-
+!***
+!
    rho1=cons(1,b(2))
    T1=p(b(2))/(rgas_loc*rho1)*muc_array(b(2))
    kappa1=get_kappa(T1)
@@ -160,10 +293,11 @@ module mcrtfld
    beta=fluxlimiter(rk,ta,dtds_mag)
 
    fyb=16d0*sigmaSBcode*beta*Ta**3*dtds/rk
-
-
+!
+!***
 !b(3)
-
+!***
+!
    rho1=cons(1,b(3))
    T1=p(b(3))/(rgas_loc*rho1)*muc_array(b(3))
    kappa1=get_kappa(T1)
@@ -177,9 +311,11 @@ module mcrtfld
    beta=fluxlimiter(rk,ta,dtds_mag)
 
    fxr=16d0*sigmaSBcode*beta*Ta**3*dtds/rk
-
+!
+!***
 !b(4)
-
+!***
+!
    rho1=cons(1,b(4))
    T1=p(b(4))/(rgas_loc*rho1)*muc_array(b(4))
    kappa1=get_kappa(T1)
@@ -193,9 +329,11 @@ module mcrtfld
    beta=fluxlimiter(rk,ta,dtds_mag)
 
    fxl=16d0*sigmaSBcode*beta*Ta**3*dtds/rk
-
+!
+!***
 !b(5)
-
+!***
+!
    rho1=cons(1,b(5))
    T1=p(b(5))/(rgas_loc*rho1)*muc_array(b(5))
    kappa1=get_kappa(T1)
@@ -209,9 +347,11 @@ module mcrtfld
    beta=fluxlimiter(rk,ta,dtds_mag)
 
    fzt=16d0*sigmaSBcode*beta*Ta**3*dtds/rk
-
+!
+!***
 !b(6)
-
+!***
+!
    rho1=cons(1,b(6))
    T1=p(b(6))/(rgas_loc*rho1)*muc_array(b(6))
    kappa1=get_kappa(T1)
@@ -225,53 +365,74 @@ module mcrtfld
    beta=fluxlimiter(rk,ta,dtds_mag)
 
    fzb=16d0*sigmaSBcode*beta*Ta**3*dtds/rk
-
-!!$OMP ATOMIC
-!     divflux(igrid)=divflux(igrid)+( area_side*((ftt+fbb+ftr+fbl+ftl+fbr))/(vol) &
-!                     + (area_top*(ftz+fbz)/vol))
-
+!
+!
+#ifdef FLDONLY
+!$OMP ATOMIC
+     divflux(igrid)=divflux(igrid)+( dx*dz*(fyt+fyb)+dy*dz*(fxl+fxr)+dx*dy*(fzt+fzb))/(vol) 
+     boundary_e=zero
+#else
    boundary_e(1)=dz*dx*max(-fyt,zero)/vol
    boundary_e(2)=dz*dx*max(-fyb,zero)/vol
    boundary_e(3)=dz*dy*max(-fxr,zero)/vol
    boundary_e(4)=dz*dy*max(-fxl,zero)/vol
    boundary_e(5)=dx*dy*max(-fzt,zero)/vol
    boundary_e(6)=dx*dy*max(-fzb,zero)/vol
-!   print *, boundary_e
-!   print *, rho0,t0,rho1,t1,p(igrid),p(b(1)),p(b(2)),p(b(3)),p(b(4)),p(b(5)),p(b(6)),p(in7),p(in8)
-!   print *, cons(1,igrid),cons(1,b(1)),cons(1,b(2)),cons(1,b(3)),cons(1,b(4)),cons(1,b(5)),cons(1,b(6)), &
-! cons(1,in7),cons(1,in8)
-!   print *, muc,rgas_loc
-!   stop
-
-
+#endif /* end ifdef FLDONLY */
+!
+!
  end subroutine
-
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+! Main work function for photon propagation
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine transfer_radiation()
-  integer::idx,igrid,iphot,nphot
+  integer::idx,igrid,iphot,nphot,id60
   real(pre)::lum,lum0,x,y,z,x0,y0,z0,azimuth,colat,azimuthp,colatp,dcol,daz,T,kappa,vol
-  real(pre)::area_top,area_side,area_tot,dtau,dl,dtaucell,r
+  real(pre)::area_top,area_side,area_tot,dtau,dl,dtaucell,r,atten,exptau
   real(pre),dimension(6)::boundary_e
 
   vol=dx*dy*dz
   dl=ds*taufac
 
   idx=currentidx
+  id60=currentidx
   maxT=zero
 
-!$OMP DO SCHEDULE(STATIC)
+!$OMP DO SCHEDULE(STATIC) PRIVATE(kappa,dtau,T,x0,y0,z0,r)
   do igrid=1,ngrid
-   divflux(igrid)=zero
+!
+!***
+! Below is a bit of a mess.  The commented code is used for
+! dissipation, which is used for testing. Leaving it in for now.
+!***
+!
+!   r=sqrt(x0*x0+y0*y0+z0*z0)
+!   if(r>1.4*dz)then
+      divflux(igrid)=zero
+!   else
+      !T=p(igrid)/(scl%rgas*cons(1,igrid))*muc_array(igrid)
+      !if(T<zero)then
+      !  print *, "WTF???",T,p(igrid)
+      !endif
+      !kappa=get_kappa(T)
+      !dtau=kappa*cons(1,igrid)*ds
+!      divflux(igrid)=1d-4*3.8e33/(scl%mass*scl%length**2/scl%time**3)/(eight*dx*dy*dz)
+      !divflux(igrid)=0.14*dtau/(scl%mass/scl%time**3)/(taum*two*dz)
+      !divflux(igrid)=1d-4*3.8e33/(scl%mass*scl%length**2/scl%time**3)/(4d0*pi*16d0)*(4d0/r)
+!   endif
   enddo
 !$OMP ENDDO
 !$OMP MASTER
-  central_print=.true.
+  central_print=.false.
 !$OMP END MASTER
 !$OMP BARRIER
+!
+!
 !$OMP DO SCHEDULE(DYNAMIC) PRIVATE(T,azimuthp,colatp,lum,lum0,x,y,z,x0,y0,z0) &
 !$OMP&PRIVATE(azimuth,colat,dcol,daz,kappa,area_top,area_side,area_tot,boundary_e) &
-!$OMP&PRIVATE(dtau,dtaucell,r) &
+!$OMP&PRIVATE(dtau,dtaucell,r,atten,exptau) &
 !$OMP&REDUCTION(max:maxT)
   do igrid=1,ngrid
 
@@ -285,109 +446,103 @@ module mcrtfld
    maxT=max(maxT,T)
    kappa=get_kappa(T)
    dtau=kappa*cons(1,igrid)*dl
-   dtaucell=dtau*ds/dl
+   dtaucell=max(dtau*ds/dl,1d-20)
 
-   if(x0**2+y0**2+z0**2<dx**2)then
-!!!!!$OMP ATOMIC
-!!!!!      divflux(igrid)=divflux(igrid)+1d-4*3.8e33/(scl%mass*scl%length**2/scl%time**3)/(eight*dx*dy*dz)
+!
+!
+#ifdef VERBOSE
+   if(x0**2+y0**2+z0**2<two*dx**2)then
       if(central_print)print *, "Temperature Central ",time,T,dtau,cons(1,igrid),time,muc_array(igrid),p(igrid)
       central_print=.false.
    endif
-
-
-   if(dtaucell>taulimit)then
+#endif /* VERBOSE */
+!
+!
      call fld(igrid,boundary_e)
-     lum0=zero
-     do iphot=1,6
-       lum0=lum0+boundary_e(iphot)
-     enddo
-     nphot=6
-     lum0=lum0/dble(nphot)
-   else
-     lum0=get_luminosity(cons(1,igrid),kappa,T)
      nphot=nphottot
-   endif
 
-!$OMP ATOMIC
-   divflux(igrid)=divflux(igrid)-lum0*dble(nphot)
-
-
-
-   if(dtaucell>tau_stream_limit.and.T>tk_bgrnd*1.1.and.cons(1,igrid)>rho_divflux_limit)then
    do iphot=1,nphot
 
-!     azimuth=ran_azimuth(idx)
-!     colat=ran_colat(idx)
-!     idx=nextidx(idx) 
-
      x=x0;y=y0;z=z0
-     lum=lum0
+     lum=zero
 
-     if(dtaucell>taulimit)then
-       colatp=zero
-       azimuthp=zero
-       daz=zero
-       dcol=zero
        select case(iphot)
-
        case(1)
          colatp=half*pi
          azimuthp=half*pi
-         lum=boundary_e(1)
+         lum=get_luminosity_2(cons(1,igrid),kappa,T,dy)
+       exptau=expinterp(cons(1,igrid),kappa,dy)
        case(2)
          colatp=half*pi
          azimuthp=1.5*pi
-         lum=boundary_e(2)
+         lum=get_luminosity_2(cons(1,igrid),kappa,T,dy)
+       exptau=expinterp(cons(1,igrid),kappa,dy)
        case(3)
          colatp=pi*half
          azimuthp=zero
-         lum=boundary_e(3)
+         lum=get_luminosity_2(cons(1,igrid),kappa,T,dx)
+       exptau=expinterp(cons(1,igrid),kappa,dx)
        case(4)
          colatp=pi*half
          azimuthp=pi
-         lum=boundary_e(4)
+         lum=get_luminosity_2(cons(1,igrid),kappa,T,dx)
+       exptau=expinterp(cons(1,igrid),kappa,dx)
        case(5)
          colatp=zero
          azimuthp=zero
-         lum=boundary_e(5)
+         lum=get_luminosity_2(cons(1,igrid),kappa,T,dz)
+       exptau=expinterp(cons(1,igrid),kappa,dz)
        case(6)
          colatp=pi
          azimuthp=zero
-         lum=boundary_e(6)
+         lum=get_luminosity_2(cons(1,igrid),kappa,T,dz)
+       exptau=expinterp(cons(1,igrid),kappa,dz)
+ 
        case(7)
          print *, "Only 6 photons allowed for now."
          stop
        end select
-  
-       x=x+ds*1.01d0*sin(colatp)*cos(azimuthp)*half
-       y=y+ds*1.01d0*sin(colatp)*sin(azimuthp)*half
-       z=z+dz*1.01d0*cos(colatp)*half
 
-       colat=colatp
-       azimuth=azimuthp
-     else
-      azimuth=ran_azimuth(idx)
-      colat=ran_colat(idx)
-      idx=nextidx(idx) 
-     endif
+       lum=lum*exptau+boundary_e(iphot)*(one-exptau)
+!
+!
+#ifdef FLDONLY
+       lum=zero
+#endif
+!
+!
+!$OMP ATOMIC
+      divflux(igrid)=divflux(igrid)-lum
 
+   if(cons(1,igrid)>rho_divflux_limit)then
+       atten=one
+       x=x+dx*1.01d0*sin(colatp)*cos(azimuthp)*half*atten
+       y=y+dy*1.01d0*sin(colatp)*sin(azimuthp)*half*atten
+       z=z+dz*1.01d0*cos(colatp)*half*atten
+       call get_angle_pert(azimuth,colat,idx,iphot)
      call propogate_photons(colat,azimuth,lum,x,y,z)
-   enddo
    endif
-
+   enddo
   enddo
 !$OMP ENDDO 
+!
+!
 !$OMP MASTER
   currentidx=idx
 !$OMP END MASTER
-
+!
+!
  end subroutine
-     
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!    
+! Follow the photons along a given direction.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine propogate_photons(colat,azimuth,lum0,x0,y0,z0)
      integer::igrid,igrid0
      real(pre),intent(in)::colat,azimuth,x0,y0,z0,lum0
      real(pre)::lum,x,y,z,dtau,kappa,T,absorb,dl,tau
-     dl=ds*taufac
+     dl=ds*taufac*half
 
      x=x0;y=y0;z=z0
      igrid=get_grid_indx(x,y,z)
@@ -395,19 +550,27 @@ module mcrtfld
      igrid0=igrid
      lum=lum0
      tau=zero
+
      do while(lum>lumlimit)
        igrid=get_grid_indx(x,y,z)
        if(grid(igrid)%boundary>0)exit
-       if(igrid>ngrid)then
+       if(igrid>ngrid.or.igrid<1)then
          print *, "Major problem.  igrid>ngrid",igrid,ngrid
          stop
        endif
        T=p(igrid)/(scl%rgas*cons(1,igrid))*muc_array(igrid)
        kappa=get_kappa(T)
        dtau=cons(1,igrid)*dl*kappa
-       !tau=tau+dtau
+!
+!
+#ifdef FLDONLY
+       if(cons(1,igrid)<rho_divflux_limit)lum=zero
+       absorb=lum
+#else
        absorb=(one-exp(-dtau))*lum
-
+#endif /* end ifdef FLDONLY */
+!
+!
 !$OMP ATOMIC
        divflux(igrid)=divflux(igrid)+absorb
 
@@ -417,28 +580,30 @@ module mcrtfld
        z=z+dl*cos(colat)
        if(x*x+y*y+z*z>r_follow_limit2)lum=zero
      enddo
-     !if(t0>0..and.t0<450.)then
-!     if(tau<10.)then
-!       print *,x0,y0,z0,x,y,z,lum,lum0,dtau,tau,igrid,igrid0,grid(igrid0)%x,grid(igrid0)%y,grid(igrid0)%z,T,T0, &
-!       cons(1,igrid0),p(igrid0),muc_array(igrid0)
-!     endif
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Apply divergence of the flux and determine whether a subcycle is 
+! necessary.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine heat_and_cool(iterate)
    logical::iterate
    integer::igrid
-   real(pre)::tcool,eps,ekin,vol
-  
+   real(pre)::tcool,eps,ekin,vol,rate_temp,T
 
-  vol=dz*dx*dy
+   vol=dz*dx*dy
 
    call transfer_radiation()
+!
 !$OMP MASTER
   coolrate=zero
   totraden=zero
   iter_cool=iter_cool+1
 !$OMP END MASTER
 !$OMP BARRIER
+!
+!
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:coolrate) PRIVATE(ekin,eps)
   do igrid=1,ngrid
    if(grid(igrid)%boundary>0)cycle
@@ -447,44 +612,74 @@ module mcrtfld
    ekin=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
    eps=max(cons(5,igrid)-ekin,small_eps)
    if(eps<=eng_table(1,1)*cons(1,igrid))cycle
-   !if(eps<=small_eps)cycle
    coolrate=max(coolrate,abs(divflux(igrid))/(cfrac*eps))
   enddo
 !$OMP ENDDO
+!
+!
 !$OMP BARRIER
   tcool=one/coolrate
-  !if(tcoolold>zero)tcool=max(tcool,1.1d0*tcoolold)
   if(tcool+cooltime>dt.or.iter_cool==maxiter)tcool=dt-cooltime
+!
 !$OMP MASTER
   tcoolold=tcool
   cooltime=cooltime+tcool
-  print *, "maxT ",time,maxT
-  print *, "tcool,cooltime,dt",tcool,cooltime,dt
+  if(cooltime>=dt)print_iter=.true.
+  if(print_iter)then
+   print *, iter_cool,"maxT ",time,maxT, "tcool,cooltime,dt",tcool,cooltime,dt
+  endif
 !$OMP END MASTER
+!
+!
 !$OMP BARRIER
-!$OMP DO SCHEDULE(STATIC) PRIVATE(ekin,eps) REDUCTION(+:totraden)
+!
+!
+!$OMP DO SCHEDULE(STATIC) PRIVATE(ekin,eps,eold) REDUCTION(+:totraden)
   do igrid=1,ngrid
    if(grid(igrid)%boundary>0)cycle
    ekin=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
-   eps=max(cons(5,igrid)-ekin+divflux(igrid)*tcool,small_eps)
+   eold=max(cons(5,igrid)-ekin,small_eps)
+   eps=max(eold+divflux(igrid)*tcool,small_eps)
+!
+!
+#ifdef FLDONLY
+   if((eps-eold)/eold>cfrac)then
+       divflux(igrid)=eold*cfrac/tcool
+       eps=eold*(one+cfrac)
+   elseif( -(eps-eold)/eold>cfrac) then
+       divflux(igrid)=-eold*cfrac/tcool
+       eps=eold*(one-cfrac)
+   endif
+#endif /* end ifdef FLDONLY */
+!
+!
    totraden=totraden+divflux(igrid)*vol
    cons(5,igrid)=eps+ekin
   enddo
 !$OMP ENDDO
 !$OMP BARRIER
+!
+!
   if(cooltime<dt)then 
      iterate= .true.
   else
      iterate= .false.
   endif
-  call state()
+  call state() ! state.f90
 !$OMP MASTER
+!
+!
+  if(print_iter)then
    print *,"#Total Luminosity", time,totraden*scl%mass*scl%length**2/scl%time**3/3.8d33
+   print_iter=.false.
+  endif
 !$OMP END MASTER
-!stop
-
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Main driving routine.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine mcrtfld_transfer
    logical::iterate
 
@@ -492,16 +687,13 @@ module mcrtfld
    cooltime=zero
    tcoolold=zero
    iter_cool=0
+   print_iter=.true.
 !$OMP END MASTER
 !$OMP BARRIER
    iterate=.true.
    do while(iterate)
       call  heat_and_cool(iterate)
    enddo
-  
  end subroutine
 
 end module
-
-
-

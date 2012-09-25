@@ -37,6 +37,12 @@ subroutine flux()
  vol=dx*dy*dz
  assoc_con=associated(cons_pt,target=cons) ! if target is cons, don't double operate
 
+!
+!***
+! Will be solving for the total energy, excluding gravity. 
+! Add pressure to this quantity.
+!***
+!
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
   cons(5,igrid)=cons(5,igrid)+p(igrid)
@@ -49,6 +55,11 @@ subroutine flux()
  enddo
 !$OMP ENDDO
  endif
+!
+!***
+! If angular momentum fluxing is used, make a variable switch.
+!***
+!
  if(fluxangmom)then
 !$OMP DO SCHEDULE(STATIC)
   do igrid=1,ngrid
@@ -73,7 +84,11 @@ subroutine flux()
 !$OMP ENDDO
   endif
  endif
-
+!
+!***
+! Enter main loop
+!***
+!
 !$OMP DO SCHEDULE(static)
  do igrid=1,ngrid
 
@@ -96,24 +111,35 @@ subroutine flux()
 
      flag=0
      if(grid(b(1))%boundary>0)then
-       if(no_out_flow.or.(grid(b(1))%boundary>2))flag=1
+       if(no_out_flow_y.or.(grid(b(1))%boundary>2))flag=1
      else
          u2=cons(idim,grid(b(1))%ineigh(1))
          f2=u2*u(2,grid(b(1))%ineigh(1))
      endif
  
      if(flag==0)then
+!
+!
 #ifdef UPWIND
      fyt=v*upwind(u2,u1,u0,um1,v,dy,dt)
 #else
+!
+!
 #ifdef TCDIFFERENCE
+!
+!
      call left_right_states(u2,u1,u0,um1,left,right)
-
      fyt=v*half*(left+right)-abs(v)*(right-left)
+!
+!
 #else
      stop"Unknown flux type"
-#endif
-#endif
+#endif /* end ifdef TCDIFFERENCE */
+!
+!
+#endif /* end ifdef UPWIND */
+!
+!
      else
        fyt=zero
      endif
@@ -129,28 +155,41 @@ subroutine flux()
      flag=0
 
      if(grid(b(2))%boundary>0)then
-       if(no_out_flow.or.(grid(b(2))%boundary>2))flag=1
+       if(no_out_flow_y.or.(grid(b(2))%boundary>2))flag=1
      else
        u2=cons(idim,grid(b(2))%ineigh(2))
        f2=-u2*u(2,grid(b(2))%ineigh(2))
      endif
       
      if(flag==0)then 
+!
+!
 #ifdef UPWIND
      fyb=v*upwind(u2,u1,u0,um1,v,dy,dt)
 #else
+!
+!
 #ifdef TCDIFFERENCE
+!
+!
      call left_right_states(u2,u1,u0,um1,left,right)
-
      fyb=v*half*(left+right)-abs(v)*(right-left)
-#endif
-#endif
+!
+!
+#endif /* end ifdef TCDIFFERENCE */
+!
+!
+#endif /* end ifdef UPWIND */
+!
+!
      else
       fyb=zero
      endif
-
-!!!!X 3 and 4
-
+!
+!***
+!X 3 and 4
+!***
+!
       v=half*(u(1,igrid)+u(1,b(3)))
 
       u1=cons(idim,b(3))
@@ -163,22 +202,33 @@ subroutine flux()
      flag=0
 
      if(grid(b(3))%boundary>0)then
-       if(no_out_flow.or.(grid(b(3))%boundary>2))flag=1
+       if(no_out_flow_x.or.(grid(b(3))%boundary>2))flag=1
      else
          u2=cons(idim,grid(b(3))%ineigh(3))
          f2=u2*u(1,grid(b(3))%ineigh(3))
      endif
  
      if(flag==0)then
+!
+!
 #ifdef UPWIND
      fxr=v*upwind(u2,u1,u0,um1,v,dx,dt)
 #else
+!
+!
 #ifdef TCDIFFERENCE
+!
+!
      call left_right_states(u2,u1,u0,um1,left,right)
-
      fxr=v*half*(left+right)-abs(v)*(right-left)
-#endif
-#endif
+!
+!
+#endif /* end ifdef TCDIFFERENCE */
+!
+!
+#endif /* end ifdef UPWIND */
+!
+!
      else
       fxr=zero
      endif
@@ -195,7 +245,7 @@ subroutine flux()
      flag=0
 
      if(grid(b(4))%boundary>0)then
-       if(no_out_flow.or.(grid(b(4))%boundary>2))flag=1
+       if(no_out_flow_x.or.(grid(b(4))%boundary>2))flag=1
      else
        u2=cons(idim,grid(b(4))%ineigh(4))
        f2=-u2*u(1,grid(b(4))%ineigh(4))
@@ -203,21 +253,34 @@ subroutine flux()
        
 
      if(flag==0)then
+!
+!
 #ifdef UPWIND
      fxl=v*upwind(u2,u1,u0,um1,v,dx,dt)
 #else
+!
+!
 #ifdef TCDIFFERENCE
+!
+!
      call left_right_states(u2,u1,u0,um1,left,right)
-
      fxl=v*half*(left+right)-abs(v)*(right-left)
-#endif
-#endif
+!
+!
+#endif /* end ifdef TCDIFFERENCE */
+!
+!
+#endif /* end ifdef UPWIND */
+!
+!
      else
       fxl=zero
      endif
-
-!!!Z 5 and 6
-
+!
+!***
+!Z 5 and 6
+!***
+!
       v=half*(u(3,igrid)+u(3,b(5)))
 
       u1=cons(idim,b(5))
@@ -230,22 +293,33 @@ subroutine flux()
      flag=0
 
      if(grid(b(5))%boundary>0)then
-       if(no_out_flow.or.(grid(b(5))%boundary>2))flag=1
+       if(no_out_flow_z.or.(grid(b(5))%boundary>2))flag=1
      else
          u2=cons(idim,grid(b(5))%ineigh(5))
          f2=u2*u(3,grid(b(5))%ineigh(5))
      endif
 
      if(flag==0)then
+!
+!
 #ifdef UPWIND
      fzt=v*upwind(u2,u1,u0,um1,v,dz,dt)
 #else
+!
+!
 #ifdef TCDIFFERENCE
+!
+!
      call left_right_states(u2,u1,u0,um1,left,right)
-
      fzt=v*half*(left+right)-abs(v)*(right-left)
-#endif
-#endif
+!
+!
+#endif /* end ifdef TCDIFFERENCE */
+!
+!
+#endif /* end ifdef UPWIND */
+!
+!
      else
        fzt=zero
      endif
@@ -260,24 +334,34 @@ subroutine flux()
      fm1=-um1*u(3,b(5))
 
      flag=0
-
      if(grid(b(6))%boundary>0)then
-       if(no_out_flow.or.(grid(b(6))%boundary>2))flag=1
+       if(no_out_flow_z.or.(grid(b(6))%boundary>2))flag=1
      else
          u2=cons(idim,grid(b(6))%ineigh(6))
          f2=-u2*u(3,grid(b(6))%ineigh(6))
      endif
        
      if(flag==0)then
+!
+!
 #ifdef UPWIND
      fzb=v*upwind(u2,u1,u0,um1,v,dz,dt)
 #else
+!
+!
 #ifdef TCDIFFERENCE
+!
+!
      call left_right_states(u2,u1,u0,um1,left,right)
-
      fzb=v*half*(left+right)-abs(v)*(right-left)
-#endif
-#endif
+!
+!
+#endif /* end ifdef TCDIFFERENCE */
+!
+!
+#endif /* end ifdef UPWIND */
+!
+!
      else
        fzb=zero
      endif
@@ -288,13 +372,12 @@ subroutine flux()
  enddo
 !$OMP ENDDO 
 !$OMP BARRIER
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!***
 ! Done with the big loop
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 ! Now update the conserved quantities
-
+!***
+!
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
   do idim=1,5
@@ -302,9 +385,11 @@ subroutine flux()
   enddo
  enddo
 !$OMP ENDDO
-
+!
+!***
 ! Put things back in order
- 
+!***
+!
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
   cons(5,igrid)=cons(5,igrid)-p(igrid)
@@ -325,6 +410,11 @@ subroutine flux()
  enddo
 !$OMP ENDDO
  endif
+!
+!***
+! If fluxing angular momentum, put it back into linear momentum.
+!***
+!
  if(fluxangmom)then
 !$OMP DO SCHEDULE(STATIC) private(x,y,r,angmom,rmom) !!!private(ekin)
  do igrid=1,ngrid
@@ -355,11 +445,10 @@ subroutine flux()
        cons_pt(2,igrid)=(x*cons_pt(3,igrid)-angmom)/y
      endif
  enddo
-!$OMP ENDDO NOWAIT
+!$OMP ENDDO
  endif ! assoc_con
  endif ! fluxangmom
-
- call set_ghost_cells()
+ call set_ghost_cells_pt() ! utils.f90
 
 !$OMP END PARALLEL
 

@@ -1,3 +1,10 @@
+!
+! Module for solving gravity on grid.
+! Contains a tree for a boundary solver
+! And a relaxation method for everything else.
+! A version of a multigrid solver is used with
+! the switch FASTGRAVITY.
+!
 module selfgravity
  use parameters
  use derived_types
@@ -8,14 +15,18 @@ module selfgravity
  type(gravcell),dimension(:),allocatable,save::grav_grid
  real(pre),dimension(:),allocatable,save::gdy,gdx,gdz,gravrho,phi_new
  real(pre)::mbox,xcom_grid,ycom_grid,zcom_grid
- real(pre)::abin=70.,ebin=0.0d0,mbin=1d0
+ real(pre)::abin=40.,ebin=0.0d0,mbin=1d0
  integer,dimension(:),allocatable,save::gny,gnx,gnz,ngrav_grid,grav_bound_indx,ngrav_bound
  integer,save::nchild=8,nlevel=4,nmulti=1
 
  real*8,save::thetaopen=0.8d0
 
  contains
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Factorial, used in expansions.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  recursive subroutine factorial(n,fac)
   logical, save::first=.true.
   real(pre)::n,fac
@@ -33,7 +44,11 @@ module selfgravity
   endif
   return  
  end subroutine factorial
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Initialize the gravity grid, including tree.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
 subroutine init_grav_grid
  
  integer::nleaf,ileaf,ilevel,ngrav_tot,iskip
@@ -54,13 +69,8 @@ subroutine init_grav_grid
  ngrav_tot=0
 
  boxx= dble(nx)*dx
- boxy=dble(ny)*dy
+ boxy= dble(ny)*dy
  boxz= dble(nz)*dz
-
-! do while (dx*two**(nlevel)>boxx)
-!   nlevel=nlevel-1
-! enddo
-! print *, "Gravity box too big. Reseting nlevel to be ",nlevel
 
  do ilevel=1,nlevel
    gdx(ilevel) = dx*two**(ilevel)
@@ -95,8 +105,6 @@ subroutine init_grav_grid
     grav_grid(igrid+iskip)%z=z
     grav_grid(igrid+iskip)%id=igrid+iskip
     grav_grid(igrid+iskip)%rmax=zero
-    !print *, igrid,iskip,igrid+iskip,x,y,z,ilevel
-    !if(ilevel==3)print *,x,y,z
     grav_grid(igrid+iskip)%boundary=.false.
     do ileaf=1,nchild
      grav_grid(igrid+iskip)%ichild(ileaf)=0
@@ -104,7 +112,6 @@ subroutine init_grav_grid
    enddo
   enddo
  enddo
-
 
  iskip=iskip+ngrav_grid(ilevel)
  
@@ -124,9 +131,7 @@ subroutine init_grav_grid
     ix = int( (x+boxx*half)/gdx(ilevel) )+1
  
    inode = (iz-1)*gny(ilevel)*gnx(ilevel)+ (iy-1)*gnx(ilevel) +ix 
-!   print *, ix,iy,iz,inode,ngrid,ngrav_grid(ilevel)
-!   print *, x,y,z,grav_grid(inode+iskip)%x,grav_grid(inode+iskip)%y,grav_grid(inode+iskip)%z
-!   print *, gdz(ilevel),gdy(ilevel),gdx(ilevel)
+
    xg=grav_grid(inode+iskip)%x
    yg=grav_grid(inode+iskip)%y
    zg=grav_grid(inode+iskip)%z
@@ -147,11 +152,10 @@ subroutine init_grav_grid
      ileaf= grav_grid(inode+iskip)%ichild(ichild)
      if(ileaf==0)then
        grav_grid(inode+iskip)%ichild(ichild)=igrid
-       if(grid(igrid)%boundary==1)then
+       if(grid(igrid)%boundary>0)then
           grav_grid(inode+iskip)%boundary=.true.
        endif
        nleaf=nleaf+1
-       !print *, inode+iskip,xg,yg,zg,x,y,z,nleaf,igrid,ichild
        exit
      else
        if(ichild>nchild)then
@@ -164,11 +168,8 @@ subroutine init_grav_grid
        endif
      endif
    enddo 
-    !print *, ileaf,ileaf+iskip,xg,yg,zg,x,y,z,nleaf,igrid
   enddo
-  !print *, "For grav_grid ",ileaf," found ",nleaf, " leaves. "
  print *, "Assigned a total of ",nleaf," children"
- !stop
 
  iskip=0
  iskip2=ngrav_grid(1)
@@ -220,7 +221,6 @@ subroutine init_grav_grid
        endif
      endif
    enddo 
-    !print *, ileaf,ileaf+iskip,xg,yg,zg,nleaf,igrid
   enddo
   iskip=iskip+ngrav_grid(ilevel)
   iskip2=iskip2+ngrav_grid(ilevel2)
@@ -260,7 +260,11 @@ subroutine init_grav_grid
  print *, "# Built Gravity Tree "
 
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Now find center of mass for each node in the gravity tree
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine set_com_in_tree
   real(pre)::x,y,z,mass,xcm,ycm,zcm,mtot_loc,mnode
   real(pre)::rmax
@@ -273,7 +277,6 @@ subroutine init_grav_grid
   do inode=1,ngrav_grid(ilevel)
     mnode=zero
     xcm=zero;ycm=zero;zcm=zero
-   ! xg=grav_grid(inode+iskip)%x;yg=grav_grid(inode+iskip)%y;zg=grav_grid(inode+iskip)%z
     do ichild=1,nchild
      indx=grav_grid(inode+iskip)%ichild(ichild)
      if(indx==0)exit
@@ -302,12 +305,20 @@ subroutine init_grav_grid
     grav_grid(inode+iskip)%zcm=zcm
     grav_grid(inode+iskip)%mass=mnode
     grav_grid(inode+iskip)%rmax=rmax
-    !print *, mnode,xcm,ycm,zcm,mnode
-    !print *, mnode,xcm,ycm,zcm,rmax,sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/2.
   enddo
+!
+!***
+! Check for consistency in total mass. There may be a slight difference
+! due to inclusion of the ghost cells, but only if significant mass is
+! at the edge of the grid.
+!***
+!
+!
 #ifdef VERBOSE
-  print *, "# Mtot on level 1 ",mtot_loc
+  print *, "# Mtot on level 1 ",mtot_loc ! check for consistency in mass.
 #endif
+!
+!
   xcom_grid=xcom_grid/mtot_loc
   ycom_grid=ycom_grid/mtot_loc
   zcom_grid=zcom_grid/mtot_loc
@@ -319,7 +330,6 @@ subroutine init_grav_grid
    do inode=1,ngrav_grid(ilevel)
      mnode=zero
      xcm=zero;ycm=zero;zcm=zero
-     !xg=grav_grid(inode+iskip)%x;yg=grav_grid(inode+iskip)%y;zg=grav_grid(inode+iskip)%z
      do ichild=1,nchild
       indx=grav_grid(inode+iskip)%ichild(ichild)
       if(indx==0)exit
@@ -338,7 +348,6 @@ subroutine init_grav_grid
       if(indx==0)cycle
       x=grav_grid(indx)%xcm;y=grav_grid(indx)%ycm;z=grav_grid(indx)%zcm
       rmax=max(rmax,sqrt( (x-xcm)**2+(y-ycm)**2+(z-zcm)**2))
-      !if(ilevel==2)print *, mnode,xcm,ycm,zcm,rmax,sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/2.
      enddo
      grav_grid(inode+iskip)%xcm=xcm
      grav_grid(inode+iskip)%ycm=ycm
@@ -346,7 +355,6 @@ subroutine init_grav_grid
      grav_grid(inode+iskip)%mass=mnode
      grav_grid(inode+iskip)%rmax=rmax
      mtot_loc=mtot_loc+mnode
-    !if(ilevel==2)print *, mnode,xcm/mnode,ycm/mnode,zcm/mnode,xg,yg,zg
    enddo
    iskip=iskip+ngrav_grid(ilevel)
    !print *,"#total mass on level ",ilevel,mtot_loc
@@ -355,11 +363,16 @@ subroutine init_grav_grid
  return
 
 end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get potential from tree only. This solves for the potential everywhere
+! using a tree. The dipole moment is included because we use the COM of
+! each mode.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
 subroutine get_pot_from_tree
   integer::igrid,ilevel,indx,l,flag,inode,iskip
   real(pre)::x,y,z,xx,yy,zz,r,phi_loc,theta
-
 
 !$OMP PARALLEL DEFAULT(SHARED) &
 !$OMP&PRIVATE(igrid,ilevel,indx,l,flag,inode,iskip)&
@@ -380,10 +393,6 @@ subroutine get_pot_from_tree
     flag=0
     if(r>zero)then
      theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
-     !theta = 2.*grav_grid(inode+iskip)%rmax/r
-!     if(grid(igrid)%iz==nz/2.and.grid(igrid)%irow==nrow/2)&
-!       print *, ilevel,theta,grav_grid(inode+iskip)%rmax,sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2),&
-!                grav_grid(inode+iskip)%mass,r
      if(theta>thetaopen)flag=1
     else
      flag=1
@@ -391,13 +400,10 @@ subroutine get_pot_from_tree
     if(flag==0)then
       !print *, "Flag level, ",nlevel
       phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
-!             (grav_grid(inode+iskip)%dpole(1)*(x-xx)    + &
-!              grav_grid(inode+iskip)%dpole(2)*(y-yy)    + &
-!              grav_grid(inode+iskip)%dpole(3)*(z-zz))/r**3
     else
       indx=inode+iskip !grav_grid(inode)%id
       l=ilevel
-      call gather_pot(phi_loc,x,y,z,indx,l,1)
+      call gather_pot(phi_loc,x,y,z,indx,l,1) ! work horse of the function.
     endif
    enddo
    !print *, igrid,phi_loc
@@ -405,10 +411,12 @@ subroutine get_pot_from_tree
  enddo
 !$OMP ENDDO
 !$OMP END PARALLEL
-
 end subroutine
-
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Similar to above, but for the boundary cells only.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
 subroutine get_pot_bc_from_tree
   integer::igrid,ilevel,indx,l,flag,inode,iskip,ibound
   real(pre)::x,y,z,xx,yy,zz,r,phi_loc,theta
@@ -417,9 +425,8 @@ subroutine get_pot_bc_from_tree
 !$OMP&PRIVATE(igrid,ilevel,indx,l,flag,inode,iskip)&
 !$OMP&PRIVATE(x,y,z,xx,yy,zz,r,phi_loc,theta)
 !$OMP DO SCHEDULE(dynamic)
-  do ibound=1,nbound
-   igrid=indx_bound(ibound)
-   !print *, "Entering grid object ",igrid 
+  do ibound=1,nghost
+   igrid=indx_ghost(ibound)
    phi_loc=zero
    x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
    iskip=0
@@ -432,73 +439,29 @@ subroutine get_pot_bc_from_tree
     r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
     flag=0
     if(r>zero)then
-     !theta = 2.*grav_grid(inode+iskip)%rmax/r
      theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
      if(theta>thetaopen)flag=1
     else
      flag=1
     endif
     if(flag==0)then
-      !print *, "Flag level, ",nlevel
       phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
-!             (grav_grid(inode+iskip)%dpole(1)*(x-xx)    + &
-!              grav_grid(inode+iskip)%dpole(2)*(y-yy)    + &
-!              grav_grid(inode+iskip)%dpole(3)*(z-zz))/r**3
     else
       indx=inode+iskip !grav_grid(inode)%id
       l=ilevel
       call gather_pot(phi_loc,x,y,z,indx,l,1)
     endif
    enddo
-   !print *, igrid,phi_loc
    phi(igrid)=phi_loc
  enddo
 !$OMP ENDDO
-#if 1 == 0
-!$OMP DO SCHEDULE(dynamic)
-  do igrid=1,ngrid,10
-   if(grid(igrid)%boundary==1)cycle
-   !print *, "Entering grid object ",igrid 
-   phi_loc=zero
-   x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
-   iskip=0
-   do ilevel=1,nlevel-1
-     iskip=iskip+ngrav_grid(ilevel)
-   enddo
-   ilevel=nlevel
-   do inode=1,ngrav_grid(ilevel)
-    xx=grav_grid(inode+iskip)%xcm;yy=grav_grid(inode+iskip)%ycm;zz=grav_grid(inode+iskip)%zcm
-    r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
-    flag=0
-    if(r>zero)then
-     !theta = 2.*grav_grid(inode+iskip)%rmax/r
-     theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
-     if(theta>thetaopen)flag=1
-    else
-     flag=1
-    endif
-    if(flag==0)then
-      !print *, "Flag level, ",nlevel
-      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
-!             (grav_grid(inode+iskip)%dpole(1)*(x-xx)    + &
-!              grav_grid(inode+iskip)%dpole(2)*(y-yy)    + &
-!              grav_grid(inode+iskip)%dpole(3)*(z-zz))/r**3
-    else
-      indx=inode+iskip !grav_grid(inode)%id
-      l=ilevel
-      call gather_pot(phi_loc,x,y,z,indx,l,1)
-    endif
-   enddo
-   !print *, igrid,phi_loc
-   phi(igrid)=phi_loc
- enddo
-!$OMP ENDDO
-#endif
-
 !$OMP END PARALLEL
-
 end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Use tree to get potential at level mlevel. 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
 subroutine get_pot_at_higher_level(mlevel)
   integer::igrid,ilevel,indx,l,flag,inode,iskip,mlevel,id,ibottom,iskip2
   real(pre)::x,y,z,xx,yy,zz,r,phi_loc,theta
@@ -514,7 +477,6 @@ subroutine get_pot_at_higher_level(mlevel)
 !$OMP DO SCHEDULE(dynamic) 
   do ibottom=1,ngrav_grid(mlevel)
    id=ibottom+iskip2
-   !print *, "Entering grid object ",igrid 
    phi_loc=zero
    x=grav_grid(id)%x;y=grav_grid(id)%y;z=grav_grid(id)%z
    iskip=0
@@ -527,32 +489,29 @@ subroutine get_pot_at_higher_level(mlevel)
     r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
     flag=0
     if(r>zero)then
-     !theta = 2.*grav_grid(inode+iskip)%rmax/r
      theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
      if(theta>thetaopen)flag=1
     else
      flag=1
     endif
     if(flag==0)then
-      !print *, "Flag level, ",nlevel
       phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
-!             (grav_grid(inode+iskip)%dpole(1)*(x-xx)    + &
-!              grav_grid(inode+iskip)%dpole(2)*(y-yy)    + &
-!              grav_grid(inode+iskip)%dpole(3)*(z-zz))/r**3
     else
       indx=inode+iskip !grav_grid(inode)%id
       l=ilevel
       call gather_pot(phi_loc,x,y,z,indx,l,mlevel)
     endif
    enddo
-   !print *, igrid,phi_loc
    grav_grid(id)%phi=phi_loc
  enddo
 !$OMP ENDDO
 !$OMP ENDPARALLEL
-
 end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get potential at domain boundaries for level mlevel
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
 subroutine get_pot_bc_at_higher_level(mlevel)
   integer::igrid,ilevel,indx,l,flag,inode,iskip,mlevel,id,ibottom,iskip2
   real(pre)::x,y,z,xx,yy,zz,r,phi_loc,theta
@@ -569,7 +528,6 @@ subroutine get_pot_bc_at_higher_level(mlevel)
 !$OMP DO SCHEDULE(dynamic) 
   do ibottom=1,ngrav_bound(mlevel)
    id=grav_bound_indx(ibottom+iskip2)
-   !print *, "Entering grid object ",igrid 
    phi_loc=zero
    x=grav_grid(id)%x;y=grav_grid(id)%y;z=grav_grid(id)%z
    iskip=0
@@ -582,18 +540,13 @@ subroutine get_pot_bc_at_higher_level(mlevel)
     r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
     flag=0
     if(r>zero)then
-     !theta = 2.*grav_grid(inode+iskip)%rmax/r
      theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
      if(theta>thetaopen)flag=1
     else
      flag=1
     endif
     if(flag==0)then
-      !print *, "Flag level, ",nlevel
       phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
-!             (grav_grid(inode+iskip)%dpole(1)*(x-xx)    + &
-!              grav_grid(inode+iskip)%dpole(2)*(y-yy)    + &
-!              grav_grid(inode+iskip)%dpole(3)*(z-zz))/r**3
     else
       indx=inode+iskip !grav_grid(inode)%id
       l=ilevel
@@ -605,26 +558,27 @@ subroutine get_pot_bc_at_higher_level(mlevel)
  enddo
 !$OMP ENDDO
 !$OMP END PARALLEL
-
 end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Main work horse for getting the potential via a tree. This is the
+! walking function.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
 recursive subroutine gather_pot(phi_loc,x,y,z,id,ilevel,level_limit)
   real(pre)::phi_loc,x,y,z,xx,yy,zz,theta,r
   integer::id,ilevel,flag,ilm,new_indx,ichild,indx,level_limit
   ilm=ilevel-1
 
-  !print *, "Gathering on level ",ilevel
   if(ilevel>1)then
 
   do ichild=1,nchild
    indx=grav_grid(id)%ichild(ichild)
    if(indx==0)exit
-   !Nprint *, id,indx,ilevel
    xx=grav_grid(indx)%xcm;yy=grav_grid(indx)%ycm;zz=grav_grid(indx)%zcm
    r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
    flag=0
    if(r>zero)then
-    !theta = 2.*grav_grid(indx)%rmax/r
     theta = sqrt(gdx(ilm)**2+gdy(ilm)**2+gdz(ilm)**2)/r!grav_grid(indx)%rmax/r
     if(theta>thetaopen.and.ilevel>level_limit)flag=1
    else
@@ -632,19 +586,9 @@ recursive subroutine gather_pot(phi_loc,x,y,z,id,ilevel,level_limit)
    endif
    if(flag==0)then
      phi_loc=phi_loc-grav_grid(indx)%mass/r     !- &
-!            (grav_grid(indx)%dpole(1)*(x-xx)    + &
-!             grav_grid(indx)%dpole(2)*(y-yy)    + &
-!             grav_grid(indx)%dpole(3)*(z-zz))/r**3
-
-     !print *, phi_loc,grav_grid(indx)%mass,r,indx
-     !print *, grav_grid(indx)%mass/r,(grav_grid(indx)%dpole(1)*(x-xx)    + &
-     !        grav_grid(indx)%dpole(2)*(y-yy)    + &
-     !        grav_grid(indx)%dpole(3)*(z-zz))/r**3
    else
      new_indx=indx!grav_grid(indx)%id
-     !print *, new_indx,indx,ilevel,theta*180./pi
      call gather_pot(phi_loc,x,y,z,new_indx,ilm,level_limit)
-     !print *,"AFTER",new_indx,indx,ilevel
    endif
   enddo
    
@@ -652,20 +596,21 @@ recursive subroutine gather_pot(phi_loc,x,y,z,id,ilevel,level_limit)
 
   do ichild=1,nchild
     indx=grav_grid(id)%ichild(ichild)
-    !print *, id,ilevel,indx,ichild
     if(indx==0)exit
     xx=grid(indx)%x;yy=grid(indx)%y;zz=grid(indx)%z
     r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2 )
     if(r>zero)then
      phi_loc=phi_loc-rhotot(indx)*dx*dy*dz/r
-!    else
-!     phi_loc=phi_loc-rhotot(indx)*dx*dy*dz/(quarter*sqrt(dy**2+dz**2+dx**2))
     endif
   enddo
 
   endif
 end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Find the gravity grid boundaries at level ilevel.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
 subroutine get_boundary_grav(ilevel,id,b)
   integer::ilevel,id,b(6)
 
@@ -677,7 +622,13 @@ subroutine get_boundary_grav(ilevel,id,b)
   b(6)=id-gnx(ilevel)*gny(ilevel)
 
 end subroutine
-
+!
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Projection function to go from coarse to fine.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!
 real(pre) function project_phi_from_coarse(ilevel,id,iskip,xc,yc,zc)
   integer::id,b(8),ilevel,zskip,iadd,iskip,i
   real(pre)::x,y,z,xc,yc,zc,phi1,phi2,phi3,phi4,phi5,phi6
@@ -767,7 +718,11 @@ real(pre) function project_phi_from_coarse(ilevel,id,iskip,xc,yc,zc)
   project_phi_from_coarse=phi5+(phi6-phi5)*(zc-z)/gdz(ilevel)
 
 end function
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Basic framework for a multigrid solver using V cycles.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine walk_the_V(first)
   integer::igrid,b(6),iter,ilevel,inode,id,indx,iskip,ichild,ilower
   real(pre)::denom,alpha,err_loc,gradphi,resid,mloc
@@ -780,7 +735,11 @@ end function
 !$OMP&PRIVATE(inode,id,indx,phi0,ichild,iskip,ilevel) &
 !$OMP&PRIVATE(rho_loc,phi_loc)  
 
-  ! baselevel
+!
+!***
+! baselevel
+!***
+!
   if(first)then
     ilevel=1
 !$OMP DO SCHEDULE(STATIC)
@@ -799,7 +758,11 @@ end function
 !$OMP ENDDO
 !$OMP BARRIER
 
-    ! other levels
+!
+!***
+! other levels
+!***
+!
     do ilevel=2,nmulti
      iskip=0
      do inode=1,ilevel-1
@@ -830,14 +793,11 @@ end function
 
   do ilevel = nmulti,1,-1
     maxerr=zero
-    !if(first)then
-     !call get_pot_bc_at_higher_level(ilevel)
      if(ilevel==nmulti)then
          call get_pot_at_higher_level(ilevel)
      else
          call get_pot_bc_at_higher_level(ilevel)
      endif
-    !endif
       maxerr=one
       iter=0
 !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(err_loc,iter) 
@@ -851,10 +811,6 @@ end function
         call sor_potential_coarse(ilevel,err_loc)
 !$OMP ATOMIC
         maxerr=max(maxerr,err_loc)
-!$OMP BARRIER
-!$OMP MASTER
-!        print *, ilevel,iter,err_loc,maxerr
-!$OMP END MASTER
 !$OMP BARRIER
        err_loc=maxerr
       enddo
@@ -870,20 +826,17 @@ end function
 !$OMP DO SCHEDULE(STATIC)
     do inode=1,ngrav_grid(ilevel)
       id=inode+iskip
-       !print *, ilevel,id,grav_grid(id)%x,grav_grid(id)%y,grav_grid(id)%z,grav_grid(id)%phi
       if(ilevel>1)then
-       !  if(ilevel==nmulti)print *, ilevel,id,grav_grid(id)%x,grav_grid(id)%y,grav_grid(id)%z,grav_grid(id)%phi
         do ichild=1,nchild
          indx=grav_grid(id)%ichild(ichild)
          if(grav_grid(indx)%boundary)cycle
          phi0=project_phi_from_coarse(ilevel,id,iskip,grav_grid(indx)%x,grav_grid(indx)%y,grav_grid(indx)%z)
          grav_grid(indx)%phi=phi0
-         !print *, ilevel,indx,grav_grid(indx)%x,grav_grid(indx)%y,grav_grid(indx)%z,phi0
         enddo
       else
         do ichild=1,nchild
          indx=grav_grid(id)%ichild(ichild)
-         if(grid(indx)%boundary==1)cycle
+         if(grid(indx)%boundary>0)cycle
          phi0=project_phi_from_coarse(ilevel,id,iskip,grid(indx)%x,grid(indx)%y,grid(indx)%z)
          phi(indx)=phi0
         enddo
@@ -892,10 +845,12 @@ end function
 !$OMP ENDDO
 !$OMP ENDPARALLEL
   enddo
-  !stop
-
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Over relaxation on the coarse grid. Used in the multigridding.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine sor_potential_coarse(ilevel,err_loc)
   integer::igrid,b(6),iter,ilevel,inode,id,indx,iskip,ichild,redblack
   real(pre)::denom,alpha,err_loc,gradphi,resid,mloc
@@ -950,7 +905,11 @@ end function
    enddo
 !$OMP ENDDO
  end subroutine
-   
+! 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+! Over relaxation on the fine grid.  This implementation is not in use
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+!
  subroutine sor_potential_fine(maxiter)
   integer::igrid,b(6),iter,master_iter,maxiter
   real(pre)::denom,alpha,err_loc,gradphi,maxerr_loc,resid
@@ -974,7 +933,7 @@ end function
   do while (iter<maxiter)
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:maxerr)
    do igrid=1,ngrid
-     if(grid(igrid)%boundary==1)cycle
+     if(grid(igrid)%boundary>0)cycle
      call get_boundary_wb(igrid,b) 
 
       resid=( (phi(b(1))+phi(b(2)))*dx*dz/dy+(phi(b(3))+phi(b(4)))*dy*dz/dx &
@@ -992,23 +951,30 @@ end function
    maxerr_loc=maxerr
 !$OMP DO  SCHEDULE(STATIC) 
    do igrid=1,ngrid
-     if(grid(igrid)%boundary==1)cycle ! don't change the boundary or anchor  potential!
+     if(grid(igrid)%boundary>0)cycle ! don't change the boundary or anchor  potential!
        phi(igrid)=phi_new(igrid)!phi(igrid)+((alpha)*phi_new(igrid)) ! subtract residual
    enddo
 !$OMP ENDDO
 #ifdef VERBOSE
+!
+!
 !$OMP MASTER
   print *, "#",iter,maxerr
   master_iter=iter
 !$OMP END MASTER
-#endif
+#endif /* end ifdef VERBOSE */
+!
+!
   iter=iter+1
   enddo
 
 !$OMP END PARALLEL
-
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Driver for multigrid solver
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine vcycle_pot()
    integer::iter
    logical first
@@ -1026,7 +992,11 @@ end function
    print *, "Refining on fine grid (iter,maxerr): ",iter,maxerr
 
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Over relaxation on fine grid. This implementation is in use.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine sor_potential2(master_iter)
   integer::igrid,b(6),iter,master_iter
   real(pre)::denom,alpha,err_loc,gradphi,maxerr_loc,resid
@@ -1050,7 +1020,7 @@ end function
 !$OMP BARRIER
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:maxerr)
    do igrid=1,ngrid
-     if(grid(igrid)%boundary==1)cycle
+     if(grid(igrid)%boundary>0)cycle
      call get_boundary_wb(igrid,b) 
 
       resid=( (phi(b(1))+phi(b(2)))*dx*dz/dy+(phi(b(3))+phi(b(4)))*dy*dz/dx &
@@ -1068,7 +1038,7 @@ end function
    maxerr_loc=maxerr
 !$OMP DO  SCHEDULE(STATIC) 
    do igrid=1,ngrid
-     if(grid(igrid)%boundary==1)cycle ! don't change the boundary or anchor  potential!
+     if(grid(igrid)%boundary>0)cycle ! don't change the boundary or anchor  potential!
        phi(igrid)=phi_new(igrid)!phi(igrid)+((alpha)*phi_new(igrid)) ! subtract residual
    enddo
 !$OMP ENDDO
@@ -1080,16 +1050,17 @@ end function
    alpha=alpha0 !- log10(min(one,maxerr))/ten
   enddo   
 !$OMP BARRIER
-!#ifdef VERBOSE
 !$OMP MASTER
-  !print *, "#",iter,maxerr
   master_iter=iter
 !$OMP END MASTER
-!#endif
 !$OMP END PARALLEL
-
  end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Add an external potential field. The default below is for a 
+! Roche potential.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
  subroutine external_phi()! simple Roche potential
   integer::igrid
   real(pre)::x,y,z,rbin,rcylbin,omega2,pert
@@ -1097,78 +1068,34 @@ end function
   real(pre)::xcom,ycom,zcom,plan,soft,r
 
 
-!$OMP PARALLEL DEFAULT(PRIVATE) SHARED(grid,phi,ngrid,dx)
-  mbin=one
-  mbox=30d-3/320.
-  x0=-5.2d0;y0=0d0;z0=0d0
-  xcom=x0-x0*mbox/(mbin+mbox);ycom=zero;zcom=zero
-  omega2=(mbin+mbox)/abs(x0)**3
-  soft=2*dx
+!$OMP PARALLEL DEFAULT(PRIVATE) SHARED(grid,phi,ngrid,dx,abin)
+  mbox=6.5d-8
 !$OMP DO SCHEDULE(STATIC)
   do igrid=1,ngrid
-    x=grid(igrid)%x
+    x=grid(igrid)%x-abin*dx
     y=grid(igrid)%y
     z=grid(igrid)%z
-     
-    rcylbin=sqrt( (x-x0)**2+(y-y0)**2)
-    rbin = sqrt(rcylbin**2+(z-z0)**2 )
+!
+!
+#ifdef CYLINDER /* This is for a very special test. Modify as needed. */
+    r=sqrt(x*x+y*y)
+#else
     r=sqrt(x*x+y*y+z*z)
-    pert=-mbin/rbin-half*omega2*( (x-xcom)**2+(y-ycom)**2 )
-    !print *, xcom,ycom,zcom,omega2,rbin,rcylbin,pert,phi(igrid)
-    if (rbin<soft)then
-      plan=-mbox/soft*( (r/soft)*(two + (r/soft)*( r/soft-two) ) )
-    else
-      plan=-mbox/r
-    endif
-    phi(igrid)=pert+plan
+#endif
+!
+!
+    plan=-mbox/r
+    phi(igrid)=plan
   enddo
 !$OMP END DO
 !$OMP END PARALLEL
  
  end subroutine
- 
- subroutine rochepert()
-  integer::igrid
-  real(pre)::x,y,z,pert
-  real(pre)::xb,yb,mbin_loc,rbin_off
-  real(pre)::thistime,rbin,thetabin,omegabin,mumass,rb_loc
-
-  !mbox=2.7508338628d-3
-  !thistime=time-2900d0+1105d0
-  !thistime=time+1105d0-4600d0
-  !thistime=time ! taken from spin moving inward
-  thistime=time+1110d0-2000d0
-  call getBinaryPosition(thisTime,rBin,thetaBin,omegaBin,mbox,muMass,abin,ebin,mbin)
-  rbin_off=rbin!sqrt( (rbin*cos(thetabin)-xcom_grid)**2+(rbin*sin(thetabin)-ycom_grid)**2 )
-  print "(A,7(1X,1pe15.8))", "#binary position ",time,rbin_off,thetabin,xcom_grid,ycom_grid,&
-        zcom_grid,mbox
-
-!$OMP PARALLEL DEFAULT(PRIVATE) SHARED(grid,phi,ngrid,rbin,thetabin,mbin) &
-!$OMP& SHARED(rbin_off,xcom_grid,ycom_grid,zcom_grid)
-  mbin_loc=mbin
-  xb=rbin*cos(thetabin)!-xcom_grid
-  yb=rbin*sin(thetabin)!-zcom_grid
-  rb_loc=rbin_off
-!$OMP DO SCHEDULE(STATIC)
-  do igrid=1,ngrid
-    x=grid(igrid)%x
-    y=grid(igrid)%y
-    z=grid(igrid)%z
-
-    pert=-mbin_loc/sqrt( (x-xb)**2+(y-yb)**2+z**2) &
-         +mbin_loc/rb_loc**3*(x*xb+y*yb)
-     
-    !print *, xb,yb,rb_loc,thetabin,pert,phi(igrid),mbin_loc
-    phi(igrid)=phi(igrid)+pert
-  enddo
-!$OMP END DO
-!$OMP END PARALLEL
-
-  !abin=max(abin*(one-dt*omegaBin/(two*pi)),50d0) for hold 58, 50, 81
-  !abin=abin*(one-dt*omegaBin/(eight*pi))
- 
- end subroutine
-
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Test phi function. 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! 
  subroutine test_phi()
     integer::igrid,jgrid
     real(pre)::x,y,z,xx,yy,zz,testphi
@@ -1190,8 +1117,5 @@ end function
     enddo
     stop
  end subroutine
-
- 
-
 end module selfgravity
 

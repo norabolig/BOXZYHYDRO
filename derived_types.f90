@@ -1,3 +1,6 @@
+!
+! Define special data types
+!
 module derived_types
  use parameters 
 
@@ -18,21 +21,22 @@ module derived_types
 
  type gravcell
   integer::id
-  !integer,dimension(27)::ichild
   integer,dimension(8)::ichild
   real(pre)::x,y,z,xcm,ycm,zcm,mass,rmax
   real(pre)::rho,phi
   logical::boundary
-!  real(pre)::dpole(3)
-!  real(pre)::qpole(3,3)
  end type
 
  type particle_type
   integer::id
   real(pre)::x,y,z,vx,vy,vz,fx,fy,fz,soft,r,m,rho0
+!
+!
 #ifdef THERMALHIST
   real(pre)::t,p,d,tm,pm,dm
 #endif
+!
+!
   logical::active
  end type
 
@@ -41,4 +45,3 @@ module derived_types
  end type
 
 end module
-

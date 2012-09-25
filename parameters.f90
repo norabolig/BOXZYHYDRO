@@ -1,3 +1,6 @@
+!
+! Basic run parameters and simulation control defaults
+!
 module parameters
  integer,parameter::pre=8
 
@@ -9,21 +12,32 @@ module parameters
 
  integer::irestart=0
 
- !io
+!
+!***
+!io
+!***
+!
  logical::write_ascii=.true.
-
- !grid parameters
-
+!
+!***
+!grid parameters
+!***
+!
  integer::nx=50,ny=50,nz=50
  real(pre)::dx=0.25d0
  real(pre)::dy=0.25d0
  real(pre)::dz=0.25d0
  real(pre)::yoffset=0.d0
  logical::fluxangmom=.false.
- logical::no_out_flow=.false.
-
- !eos parameters
- real(pre)::mu_z=16.78d0
+ logical::no_out_flow_x=.true.
+ logical::no_out_flow_y=.true.
+ logical::no_out_flow_z=.true.
+!
+!***
+!eos parameters
+!***
+!
+ real(pre)::mu_z=28.75d0
  real(pre)::brot=85.4d0
  real(pre)::vib=5987d0
  real(pre)::diss=52000d0
@@ -38,12 +52,15 @@ module parameters
  real(pre)::rho_eos_high=1d-4
  real(pre)::rho_eos_low=1d-15
  real(pre)::tk_eos_cutoff=1d4
- 
+!
  integer::NEOS_T=600
  integer::NEOS_RHO=500
  integer::H2STAT=0 ! 0 mixture, 1 equilibrium, -1 fixed gamma
-
- !hydro
+!
+!***
+!hydro
+!***
+!
  real(pre)::small_rho=1d-10
  real(pre)::small_eps=1d-40
  real(pre)::vlimit=1d1
@@ -51,18 +68,27 @@ module parameters
  real(pre)::endtime=0d0
  real(pre)::dtout=20d0
  real(pre)::cfl=0.25d0
-
+!
  real(pre)::den_change_tol=0.1d0
  real(pre)::avmagx=0.0d0,avmagy=0.d0,avmagz=0.00d0
-
+!
  real(pre)::anchorradius=100d0
+ real(pre)::tkflow=288d0
+ real(pre)::rhoflow=1.2d-3
+ real(pre)::vflow=4117d0
 
  character(32)::flux_limit_type='minmod'
 #define MINMOD
-! this once was used as an on-the-fly switch, but it is a HUGE performance hit.
+!
+!***
+! Above once was used as an on-the-fly switch, but it is a HUGE performance hit.
 ! better to just define it using the preprocessor
-
- !gravity
+!***
+!
+!
+!***
+!gravity
+!***
  integer::yml_max=10
  integer::nrad_yml=100
  integer::anchor_space=10
@@ -70,17 +96,22 @@ module parameters
  integer::miniter=10
  real(pre)::grav_err_tol=1e-5
  real(pre)::grav_err_tol_low=1e-5
-
- !particles
- integer::npart=500000
- integer::npart_direct=3
- real(pre)::tg_immediate_couple=1450d0
+!
+!***
+!particles
+!***
+!
+ integer::npart=1000
+ integer::npart_direct=0
+ real(pre)::tg_immediate_couple=1d4
  real(pre)::a_sublimate_limit=6.67e-13
  logical::use_pic=.true.
- !real(pre)::a_sublimate_limit=6.67e13
- 
-
- 
+ logical::initialize_particles_now=.true.
+!
+!***
+! constants
+!***
+!
  real(pre),parameter:: &
   zero=0d0,&
   one=1.d0,&
