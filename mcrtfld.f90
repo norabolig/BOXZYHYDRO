@@ -14,7 +14,7 @@ module mcrtfld
  integer::RANSEED(1)=314159
  integer::RANLENGTH=50000
 
- integer::currentidx,ran60_id
+ integer::currentidx
  integer::iter_cool,maxiter=100
 !
 !
@@ -25,10 +25,9 @@ module mcrtfld
 #endif /* end ifdef FLDONLY */
 !
 !
- real(pre)::taufac=1d0
  real(pre)::cfrac=0.1d0
  real(pre)::opac_scale=1d0,taum=1d-1
- real(pre),dimension(:),allocatable::divflux,ran_colat,ran_azimuth,ran_pm60
+ real(pre),dimension(:),allocatable::divflux,ran_colat,ran_azimuth,ran_pm90
  real(pre)::scale_kappa,sigmaSBcode,coolrate,cooltime,totraden,tcoolold,eold
  real(pre)::rho_divflux_limit=1d-8,rho_timestep=1d-8,tau_stream_limit=1d-100
  real(pre)::lumlimit=0d0
@@ -64,12 +63,12 @@ module mcrtfld
 ! angle for propagating a photon packet.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
- subroutine get_angle_pert(az,co,idx,idir)
+ subroutine get_angle_pert(xp,yp,zp,idx,idir)
    real(pre)::az,co,x,y,z,xp,yp,zp,cosaz,sinaz,cosco,sinco
    integer::idx,idir
 
    az=ran_azimuth(idx);idx=nextidx(idx)
-   co=ran_pm60(idx);idx=nextidx(idx)
+   co=ran_pm90(idx);idx=nextidx(idx)
 
    cosco=cos(co)
    sinco=sin(co)
@@ -118,13 +117,10 @@ module mcrtfld
    case(6)
 
     xp=x
-    yp=y
+    yp=-y
     zp=-z
       
    end select 
-
-   az=atan2(yp,xp)
-   co=acos(zp)
 
    return
 
@@ -211,7 +207,7 @@ module mcrtfld
   allocate(divflux(ngrid))
   allocate(ran_azimuth(RANLENGTH))
   allocate(ran_colat(RANLENGTH))
-  allocate(ran_pm60(RANLENGTH))
+  allocate(ran_pm90(RANLENGTH))
   call get_units(scl)
   scale_kappa=scl%mass/scl%length**2
   sigmaSBcode=5.67d-5/(scl%mass/scl%time**3)
@@ -220,7 +216,7 @@ module mcrtfld
   call random_number(ran_azimuth)
   do i=1,RANLENGTH
     ran_azimuth(i)=ran_azimuth(i)*two*pi
-    ran_pm60(i)=acos(half+half*ran_colat(i))
+    ran_pm90(i)=acos(ran_colat(i))
     ran_colat(i)=acos(one-two*ran_colat(i))
   enddo
   currentidx=1
@@ -388,16 +384,16 @@ module mcrtfld
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
  subroutine transfer_radiation()
-  integer::idx,igrid,iphot,nphot,id60
+  integer::idx,igrid,iphot,nphot
   real(pre)::lum,lum0,x,y,z,x0,y0,z0,azimuth,colat,azimuthp,colatp,dcol,daz,T,kappa,vol
-  real(pre)::area_top,area_side,area_tot,dtau,dl,dtaucell,r,atten,exptau
+  real(pre)::area_top,area_side,area_tot,dtau,dl,dtaucell,r,atten,exptau,delx,dely,delz
+  real(pre)::xp,yp,zp
   real(pre),dimension(6)::boundary_e
 
   vol=dx*dy*dz
-  dl=ds*taufac
+  dl=ds
 
   idx=currentidx
-  id60=currentidx
   maxT=zero
 
 !$OMP DO SCHEDULE(STATIC) PRIVATE(kappa,dtau,T,x0,y0,z0,r)
@@ -432,7 +428,7 @@ module mcrtfld
 !
 !$OMP DO SCHEDULE(DYNAMIC) PRIVATE(T,azimuthp,colatp,lum,lum0,x,y,z,x0,y0,z0) &
 !$OMP&PRIVATE(azimuth,colat,dcol,daz,kappa,area_top,area_side,area_tot,boundary_e) &
-!$OMP&PRIVATE(dtau,dtaucell,r,atten,exptau) &
+!$OMP&PRIVATE(dtau,dtaucell,r,atten,exptau,delx,dely,delz,xp,yp,zp) &
 !$OMP&REDUCTION(max:maxT)
   do igrid=1,ngrid
 
@@ -463,41 +459,45 @@ module mcrtfld
 
    do iphot=1,nphot
 
-     x=x0;y=y0;z=z0
      lum=zero
 
-       select case(iphot)
+     select case(iphot)
        case(1)
-         colatp=half*pi
-         azimuthp=half*pi
+         delz=zero
+         delx=zero
+         dely= half*dy*1.01d0
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dy)
-       exptau=expinterp(cons(1,igrid),kappa,dy)
+         exptau=expinterp(cons(1,igrid),kappa,dy)
        case(2)
-         colatp=half*pi
-         azimuthp=1.5*pi
+         delz=zero
+         delx=zero
+         dely=-half*dy*1.01d0
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dy)
-       exptau=expinterp(cons(1,igrid),kappa,dy)
+         exptau=expinterp(cons(1,igrid),kappa,dy)
        case(3)
-         colatp=pi*half
-         azimuthp=zero
+         delz=zero
+         delx= half*dx*1.01d0
+         dely=zero
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dx)
-       exptau=expinterp(cons(1,igrid),kappa,dx)
+         exptau=expinterp(cons(1,igrid),kappa,dx)
        case(4)
-         colatp=pi*half
-         azimuthp=pi
+         delz=zero
+         delx=-half*dx*1.01d0
+         dely=zero
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dx)
-       exptau=expinterp(cons(1,igrid),kappa,dx)
+         exptau=expinterp(cons(1,igrid),kappa,dx)
        case(5)
-         colatp=zero
-         azimuthp=zero
+         delz= half*dz*1.01d0
+         delx=zero
+         dely=zero
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dz)
-       exptau=expinterp(cons(1,igrid),kappa,dz)
+         exptau=expinterp(cons(1,igrid),kappa,dz)
        case(6)
-         colatp=pi
-         azimuthp=zero
+         delz=-half*dz*1.01d0
+         delx=zero
+         dely=zero
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dz)
-       exptau=expinterp(cons(1,igrid),kappa,dz)
- 
+         exptau=expinterp(cons(1,igrid),kappa,dz)
        case(7)
          print *, "Only 6 photons allowed for now."
          stop
@@ -516,11 +516,11 @@ module mcrtfld
 
    if(cons(1,igrid)>rho_divflux_limit)then
        atten=one
-       x=x+dx*1.01d0*sin(colatp)*cos(azimuthp)*half*atten
-       y=y+dy*1.01d0*sin(colatp)*sin(azimuthp)*half*atten
-       z=z+dz*1.01d0*cos(colatp)*half*atten
-       call get_angle_pert(azimuth,colat,idx,iphot)
-     call propogate_photons(colat,azimuth,lum,x,y,z)
+       x=x0+delx
+       y=y0+dely
+       z=z0+delz
+       call get_angle_pert(xp,yp,zp,idx,iphot)
+     call propogate_photons(xp,yp,zp,lum,x,y,z)
    endif
    enddo
   enddo
@@ -538,11 +538,14 @@ module mcrtfld
 ! Follow the photons along a given direction.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
- subroutine propogate_photons(colat,azimuth,lum0,x0,y0,z0)
+ subroutine propogate_photons(xp,yp,zp,lum0,x0,y0,z0)
      integer::igrid,igrid0
-     real(pre),intent(in)::colat,azimuth,x0,y0,z0,lum0
-     real(pre)::lum,x,y,z,dtau,kappa,T,absorb,dl,tau
-     dl=ds*taufac*half
+     real(pre),intent(in)::xp,yp,zp,x0,y0,z0,lum0
+     real(pre)::lum,x,y,z,dtau,kappa,T,absorb,dl,tau,delx,dely,delz
+     dl=min(min(dx,dy),dz)*half
+     delx=dl*xp
+     dely=dl*yp
+     delz=dl*zp
 
      x=x0;y=y0;z=z0
      igrid=get_grid_indx(x,y,z)
@@ -575,9 +578,9 @@ module mcrtfld
        divflux(igrid)=divflux(igrid)+absorb
 
        lum=lum-absorb
-       x=x+dl*sin(colat)*cos(azimuth)
-       y=y+dl*sin(colat)*sin(azimuth)
-       z=z+dl*cos(colat)
+       x=x+delx
+       y=y+dely
+       z=z+delz
        if(x*x+y*y+z*z>r_follow_limit2)lum=zero
      enddo
  end subroutine
