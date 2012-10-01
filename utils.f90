@@ -10,7 +10,7 @@ module utils
 ! These variables need to be shared for reduction methods in parallelized loops
 !***
 !
- real(pre)::mass,eint,ekin,etot,egra,amom,momx,momy,momz,xcom,ycom,zcom
+ real(pre),save::mass,eint,ekin,etot,egra,amom,momx,momy,momz,xcom,ycom,zcom
  real(pre),save::xcom0,ycom0,zcom0
  logical,save::comfirst=.true.
 
@@ -764,6 +764,7 @@ subroutine getBinaryPosition(tt,rBin,thetaBin,omegaBin, &
    use grid_commons
    real(pre)::x,y,z,angle
    integer::igrid
+!$OMP MASTER
    mass=zero
    eint=zero
    ekin=zero
@@ -775,6 +776,8 @@ subroutine getBinaryPosition(tt,rBin,thetaBin,omegaBin, &
    xcom=zero
    ycom=zero
    zcom=zero
+!$OMP END MASTER 
+!$OMP BARRIER
 !$OMP DO SCHEDULE(STATIC) REDUCTION(+:mass,ekin,eint,amom,momx)        &
 !$OMP&REDUCTION(+:momy,momz,etot,egra,xcom,ycom,zcom)
    do igrid=1,ngrid
