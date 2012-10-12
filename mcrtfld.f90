@@ -403,7 +403,7 @@ module mcrtfld
 ! Below is a bit of a mess.  The commented code is used for
 ! dissipation, which is used for testing. Leaving it in for now.
 !***
-!
+!   x0=grid(igrid)%x;y0=grid(igrid)%y;z0=grid(igrid)%z
 !   r=sqrt(x0*x0+y0*y0+z0*z0)
 !   if(r>1.4*dz)then
       divflux(igrid)=zero
