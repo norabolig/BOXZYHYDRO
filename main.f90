@@ -218,11 +218,12 @@ do
 !
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
-  if(mod(step,25)==zero.and.time<250)then;cons(2:4,igrid)=zero
-  elseif(mod(step,50)==zero.and.time<500)then;cons(2:4,igrid)=zero
-  elseif(mod(step,100)==zero.and.time<1000)then;cons(2:4,igrid)=zero
-  elseif(mod(step,200)==zero.and.time<1500)then;cons(2:4,igrid)=zero
-  endif
+!*** Following is used for testing
+!if(mod(step,25)==zero.and.time<250)then;cons(2:4,igrid)=zero
+!  elseif(mod(step,50)==zero.and.time<500)then;cons(2:4,igrid)=zero
+!  elseif(mod(step,100)==zero.and.time<1000)then;cons(2:4,igrid)=zero
+!  elseif(mod(step,200)==zero.and.time<1500)then;cons(2:4,igrid)=zero
+!  endif
  do idim=1,5
    cons_old(idim,igrid)=cons(idim,igrid)
  enddo
