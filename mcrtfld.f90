@@ -14,7 +14,7 @@ module mcrtfld
  integer::RANSEED(1)=314159
  integer::RANLENGTH=50000
 
- integer::currentidx
+ integer::currentidx,ran60_id
  integer::iter_cool,maxiter=100
 !
 !
@@ -25,15 +25,16 @@ module mcrtfld
 #endif /* end ifdef FLDONLY */
 !
 !
+ real(pre)::taufac=1d0
  real(pre)::cfrac=0.1d0
  real(pre)::opac_scale=1d0,taum=1d-1
- real(pre),dimension(:),allocatable::divflux,ran_colat,ran_azimuth,ran_pm90
- real(pre)::scale_kappa,sigmaSBcode,coolrate,cooltime,totraden,tcoolold,eold
+ real(pre),dimension(:),allocatable::divflux,ran_colat,ran_azimuth,ran_pm45
+ real(pre)::scale_kappa,sigmaSBcode,coolrate,cooltime,totraden,tcoolold,eold,total_cool
  real(pre)::rho_divflux_limit=1d-8,rho_timestep=1d-8,tau_stream_limit=1d-100
- real(pre)::lumlimit=0d0
- real(pre)::r_follow_limit=8d0,r_follow_limit2
+ real(pre)::lumlimit=1d-25
+ real(pre)::r_follow_limit=1d0,r_follow_limit2
  real(pre)::maxT,ds=zero
- logical:: central_print=.false.,print_iter=.true.
+ logical:: central_print,print_iter=.true.
  
  type(units)::scl
 
@@ -63,12 +64,13 @@ module mcrtfld
 ! angle for propagating a photon packet.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
+
  subroutine get_angle_pert(xp,yp,zp,idx,idir)
    real(pre)::az,co,x,y,z,xp,yp,zp,cosaz,sinaz,cosco,sinco
    integer::idx,idir
 
    az=ran_azimuth(idx);idx=nextidx(idx)
-   co=ran_pm90(idx);idx=nextidx(idx)
+   co=ran_pm45(idx);idx=nextidx(idx)
 
    cosco=cos(co)
    sinco=sin(co)
@@ -132,13 +134,6 @@ module mcrtfld
 !
  real(pre) function get_kappa(T)
    real(pre),intent(in)::T
-!
-!***
-! simplified opacity or testing. Uncomment if desired.
-!***
-!
-   get_kappa=1d0*scale_kappa*opac_scale
-   return
 !
 !***
 !     Pollack et al. (1994) rosseland opacities
@@ -207,7 +202,7 @@ module mcrtfld
   allocate(divflux(ngrid))
   allocate(ran_azimuth(RANLENGTH))
   allocate(ran_colat(RANLENGTH))
-  allocate(ran_pm90(RANLENGTH))
+  allocate(ran_pm45(RANLENGTH))
   call get_units(scl)
   scale_kappa=scl%mass/scl%length**2
   sigmaSBcode=5.67d-5/(scl%mass/scl%time**3)
@@ -216,7 +211,7 @@ module mcrtfld
   call random_number(ran_azimuth)
   do i=1,RANLENGTH
     ran_azimuth(i)=ran_azimuth(i)*two*pi
-    ran_pm90(i)=acos(ran_colat(i))
+    ran_pm45(i)=acos(ran_colat(i))
     ran_colat(i)=acos(one-two*ran_colat(i))
   enddo
   currentidx=1
@@ -384,16 +379,17 @@ module mcrtfld
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
  subroutine transfer_radiation()
-  integer::idx,igrid,iphot,nphot
+  integer::idx,igrid,iphot,nphot,id60
   real(pre)::lum,lum0,x,y,z,x0,y0,z0,azimuth,colat,azimuthp,colatp,dcol,daz,T,kappa,vol
-  real(pre)::area_top,area_side,area_tot,dtau,dl,dtaucell,r,atten,exptau,delx,dely,delz
-  real(pre)::xp,yp,zp
+  real(pre)::area_top,area_side,area_tot,dtau,dl,dtaucell,r,atten,exptau
+  real(pre)::xp,yp,zp,delx,dely,delz
   real(pre),dimension(6)::boundary_e
 
   vol=dx*dy*dz
-  dl=ds
+  dl=ds*taufac
 
   idx=currentidx
+  id60=currentidx
   maxT=zero
 
 !$OMP DO SCHEDULE(STATIC) PRIVATE(kappa,dtau,T,x0,y0,z0,r)
@@ -403,7 +399,7 @@ module mcrtfld
 ! Below is a bit of a mess.  The commented code is used for
 ! dissipation, which is used for testing. Leaving it in for now.
 !***
-!   x0=grid(igrid)%x;y0=grid(igrid)%y;z0=grid(igrid)%z
+!
 !   r=sqrt(x0*x0+y0*y0+z0*z0)
 !   if(r>1.4*dz)then
       divflux(igrid)=zero
@@ -420,9 +416,9 @@ module mcrtfld
 !   endif
   enddo
 !$OMP ENDDO
-!$OMP MASTER
-  central_print=.false.
-!$OMP END MASTER
+!!!$OMP MASTER
+!!  central_print=.true.
+!!!$OMP END MASTER
 !$OMP BARRIER
 !
 !
@@ -459,50 +455,56 @@ module mcrtfld
 
    do iphot=1,nphot
 
+     x=x0;y=y0;z=z0
      lum=zero
+     exptau=zero
+     delx=zero
+     dely=zero
+     delz=zero
 
-     select case(iphot)
+       select case(iphot)
        case(1)
          delz=zero
          delx=zero
          dely= half*dy*1.01d0
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dy)
-         exptau=expinterp(cons(1,igrid),kappa,dy)
+       exptau=expinterp(cons(1,igrid),kappa,dy)
        case(2)
          delz=zero
          delx=zero
          dely=-half*dy*1.01d0
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dy)
-         exptau=expinterp(cons(1,igrid),kappa,dy)
+       exptau=expinterp(cons(1,igrid),kappa,dy)
        case(3)
          delz=zero
          delx= half*dx*1.01d0
          dely=zero
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dx)
-         exptau=expinterp(cons(1,igrid),kappa,dx)
+       exptau=expinterp(cons(1,igrid),kappa,dx)
        case(4)
          delz=zero
          delx=-half*dx*1.01d0
          dely=zero
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dx)
-         exptau=expinterp(cons(1,igrid),kappa,dx)
+       exptau=expinterp(cons(1,igrid),kappa,dx)
        case(5)
          delz= half*dz*1.01d0
          delx=zero
          dely=zero
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dz)
-         exptau=expinterp(cons(1,igrid),kappa,dz)
+       exptau=expinterp(cons(1,igrid),kappa,dz)
        case(6)
          delz=-half*dz*1.01d0
          delx=zero
          dely=zero
          lum=get_luminosity_2(cons(1,igrid),kappa,T,dz)
-         exptau=expinterp(cons(1,igrid),kappa,dz)
+       exptau=expinterp(cons(1,igrid),kappa,dz)
+ 
        case(7)
          print *, "Only 6 photons allowed for now."
          stop
        end select
-
+!
        lum=lum*exptau+boundary_e(iphot)*(one-exptau)
 !
 !
@@ -515,12 +517,11 @@ module mcrtfld
       divflux(igrid)=divflux(igrid)-lum
 
    if(cons(1,igrid)>rho_divflux_limit)then
-       atten=one
        x=x0+delx
        y=y0+dely
        z=z0+delz
        call get_angle_pert(xp,yp,zp,idx,iphot)
-     call propogate_photons(xp,yp,zp,lum,x,y,z)
+       call propogate_photons(xp,yp,zp,lum,x,y,z)
    endif
    enddo
   enddo
@@ -672,8 +673,9 @@ module mcrtfld
 !$OMP MASTER
 !
 !
+  total_cool=total_cool+totraden*tcool
   if(print_iter)then
-   print *,"#Total Luminosity", time,totraden*scl%mass*scl%length**2/scl%time**3/3.8d33
+   print *,"#Total Luminosity", time,totraden*scl%mass*scl%length**2/scl%time**3/3.8d33,totraden*dt
    print_iter=.false.
   endif
 !$OMP END MASTER
@@ -683,14 +685,16 @@ module mcrtfld
 ! Main driving routine.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
- subroutine mcrtfld_transfer
+ subroutine mcrtfld_transfer()
    logical::iterate
 
 !$OMP MASTER
    cooltime=zero
    tcoolold=zero
+   total_cool=zero
    iter_cool=0
    print_iter=.true.
+   central_print=.true.
 !$OMP END MASTER
 !$OMP BARRIER
    iterate=.true.

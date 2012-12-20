@@ -11,12 +11,13 @@ subroutine flux()
  implicit none
 
  real(pre),allocatable,dimension(:,:)::fluxtmp
+ real(pre),allocatable,dimension(:)::rhophi,rhophi_pt
 
  integer :: igrid,b(6),idim,flag
  real(pre)::fxl,fxr,fyt,fyb,fzt,fzb,areaxy,areayz,areaxz
  real(pre)::vol,v,f2,f1,f0,fm1,slopef,slopeb,left,right
- real(pre)::x,y,z,r,angmom,rmom
- real(pre)::u1,u2,u0,um1,fleft,fright
+ real(pre)::x,y,z,r,angmom,rmom,cfast,alocal(6),clocal
+ real(pre)::u1,u2,u0,um1,fleft,fright,theta=1.0d0
 
  logical :: assoc_con
  type(units)::scale
@@ -24,11 +25,13 @@ subroutine flux()
  call get_units(scale)
 
  allocate(fluxtmp(5,ngrid))
+! allocate(rhophi(ngrid))
+! allocate(rhophi_pt(ngrid))
 
 !$OMP PARALLEL DEFAULT(SHARED) &
 !$OMP&PRIVATE(areaxy,areayz,areaxz,u1,u2,u0,um1,fleft,fright) &
-!$OMP&private(v,f2,f1,f0,fm1,slopef,slopeb,flag) &
-!$OMP&private(fzt,fzb,fxr,fxl,fyt,fyb,left,right) &
+!$OMP&private(v,f2,f1,f0,fm1,slopef,slopeb,flag,cfast,clocal) &
+!$OMP&private(fzt,fzb,fxr,fxl,fyt,fyb,left,right,alocal) &
 !$OMP&private(b,angmom,rmom,x,y,z,r,assoc_con)
 
  areaxy=dy*dx
@@ -43,15 +46,21 @@ subroutine flux()
 ! Add pressure to this quantity.
 !***
 !
+!!$OMP DO SCHEDULE(STATIC)
+!  do igrid=1,ngrid
+!   rhophi(igrid)=cons(1,igrid)*phi(igrid)
+!   rhophi_pt(igrid)=cons_pt(1,igrid)*phi(igrid)
+!  enddo  
+!!$OMP ENDDO
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
-  cons(5,igrid)=cons(5,igrid)+p(igrid)
+  cons(5,igrid)=cons(5,igrid)+p(igrid)!+rhophi(igrid)
  enddo
 !$OMP ENDDO
  if(.not.assoc_con)then
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
-  cons_pt(5,igrid)=cons_pt(5,igrid)+p(igrid)
+  cons_pt(5,igrid)=cons_pt(5,igrid)+p(igrid)!+rhophi_pt(igrid)
  enddo
 !$OMP ENDDO
  endif
@@ -98,6 +107,12 @@ subroutine flux()
   x=grid(igrid)%x;y=grid(igrid)%y+yoffset;z=grid(igrid)%z
   r=sqrt(x*x+y*y)
 
+  clocal=sqrt(max(adindx(igrid)*p(igrid)/cons(1,igrid),zero))
+  do idim=1,6
+     alocal(idim)=sqrt(max(adindx(b(idim))*p(b(idim))/cons(1,b(idim)),zero))
+     alocal(idim)=half*(alocal(idim)+clocal)
+  enddo
+
   do idim=1,5
 
       v=half*(u(2,igrid)+u(2,b(1)))
@@ -128,8 +143,9 @@ subroutine flux()
 #ifdef TCDIFFERENCE
 !
 !
+     cfast=abs(v)*theta
      call left_right_states(u2,u1,u0,um1,left,right)
-     fyt=v*half*(left+right)-abs(v)*(right-left)
+     fyt=v*half*(left+right)-cfast*(right-left)
 !
 !
 #else
@@ -172,8 +188,9 @@ subroutine flux()
 #ifdef TCDIFFERENCE
 !
 !
+     cfast=abs(v)*theta
      call left_right_states(u2,u1,u0,um1,left,right)
-     fyb=v*half*(left+right)-abs(v)*(right-left)
+     fyb=v*half*(left+right)-cfast*(right-left)
 !
 !
 #endif /* end ifdef TCDIFFERENCE */
@@ -219,8 +236,9 @@ subroutine flux()
 #ifdef TCDIFFERENCE
 !
 !
+     cfast=abs(v)*theta
      call left_right_states(u2,u1,u0,um1,left,right)
-     fxr=v*half*(left+right)-abs(v)*(right-left)
+     fxr=v*half*(left+right)-cfast*(right-left)
 !
 !
 #endif /* end ifdef TCDIFFERENCE */
@@ -263,8 +281,9 @@ subroutine flux()
 #ifdef TCDIFFERENCE
 !
 !
+     cfast=abs(v)*theta
      call left_right_states(u2,u1,u0,um1,left,right)
-     fxl=v*half*(left+right)-abs(v)*(right-left)
+     fxl=v*half*(left+right)-cfast*(right-left)
 !
 !
 #endif /* end ifdef TCDIFFERENCE */
@@ -310,8 +329,9 @@ subroutine flux()
 #ifdef TCDIFFERENCE
 !
 !
+     cfast=abs(v)*theta
      call left_right_states(u2,u1,u0,um1,left,right)
-     fzt=v*half*(left+right)-abs(v)*(right-left)
+     fzt=v*half*(left+right)-cfast*(right-left)
 !
 !
 #endif /* end ifdef TCDIFFERENCE */
@@ -352,8 +372,9 @@ subroutine flux()
 #ifdef TCDIFFERENCE
 !
 !
+     cfast=abs(v)*theta
      call left_right_states(u2,u1,u0,um1,left,right)
-     fzb=v*half*(left+right)-abs(v)*(right-left)
+     fzb=v*half*(left+right)-cfast*(right-left)
 !
 !
 #endif /* end ifdef TCDIFFERENCE */
@@ -392,7 +413,7 @@ subroutine flux()
 !
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
-  cons(5,igrid)=cons(5,igrid)-p(igrid)
+  cons(5,igrid)=cons(5,igrid)-p(igrid)!-rhophi(igrid)
   if(cons(5,igrid)<zero)then
     cons(5,igrid)=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
   endif
@@ -402,7 +423,7 @@ subroutine flux()
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
   cons_pt(1,igrid)=max(cons_pt(1,igrid),small_rho)
-  cons_pt(5,igrid)=cons_pt(5,igrid)-p(igrid)
+  cons_pt(5,igrid)=cons_pt(5,igrid)-p(igrid)!-rhophi_pt(igrid)
   if(cons_pt(5,igrid)<zero)then
     cons_pt(5,igrid)=half*(cons_pt(2,igrid)**2+cons_pt(3,igrid)**2+cons_pt(4,igrid)**2) &
                     /cons_pt(1,igrid)
@@ -452,6 +473,6 @@ subroutine flux()
 
 !$OMP END PARALLEL
 
- deallocate(fluxtmp)
+ deallocate(fluxtmp)!,rhophi,rhophi_pt)
 
 end subroutine
