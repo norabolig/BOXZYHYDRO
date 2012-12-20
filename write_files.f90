@@ -16,7 +16,7 @@ subroutine write_files(step)
  implicit none
 !
  integer, intent(in)::step
- integer:: igrid,ibd,readtest=1234
+ integer:: igrid,ibd,readtest=1234,ipart
  real(pre)::x,y,z,eps,tk
  character::cindx*8,filename*80
  type(units)::scale
