@@ -215,41 +215,15 @@ module particle
 ! Will make this a separate file.
 !***
 !
-   part(ipart)%x=90*dx+rand()*dx
-   part(ipart)%z=-dz+rand()*two*dz
-   if(ipart==1)then
-     part(ipart)%y=rand()*dy+dy
-   elseif(ipart==2)then
-     part(ipart)%y=rand()*dy+two*dy
-   elseif(ipart==3)then
-     part(ipart)%y=rand()*dy+four*dy
-   elseif(ipart==4)then
-     part(ipart)%y=rand()*dy+six*dy
-   elseif(ipart==5)then
-     part(ipart)%y=rand()*dy+eight*dy
-   elseif(ipart==6)then
-     part(ipart)%y=rand()*dy+ten*dy
-   elseif(ipart==7)then
-     part(ipart)%y=rand()*dy+12*dy
-   elseif(ipart==8)then
-     part(ipart)%y=rand()*dy+14*dy
-   elseif(ipart==9)then
-     part(ipart)%y=rand()*dy+16*dy
-   elseif(ipart==10)then
-     part(ipart)%y=rand()*dy+18*dy
-   elseif(ipart==11)then
-     part(ipart)%y=rand()*dy+20*dy
-    elseif(ipart==12)then
-     part(ipart)%y=rand()*dy+30*dy
-   elseif(ipart==13)then
-     part(ipart)%y=rand()*dy+40*dy
-   else
-     part(ipart)%y=-45*dy+rand()*dy*90
-     part(ipart)%z=-45*dz+rand()*dz*90
-   endif
+   r=1d0!+sqrt(rand())*4*dx
+   dphi=two*pi*rand()
+   theta=acos(one-two*rand())
+   part(ipart)%x=r*sin(theta)*cos(dphi)
+   part(ipart)%y=r*sin(theta)*sin(dphi)
+   part(ipart)%z=r*cos(theta)
    part(ipart)%m=1d-40
    part(ipart)%vy=zero
-   part(ipart)%vx=-vflow/scl%vel
+   part(ipart)%vx=zero
    part(ipart)%vz=0.0
    part(ipart)%fx=0.0
    part(ipart)%fy=0.0
@@ -259,7 +233,13 @@ module particle
 !
 #ifdef WITHDRAG
        part(ipart)%rho0=3./scl%density
-       asize=3d-2/scl%length
+       if (ipart<500)then;asize=1d5/scl%length
+       elseif(ipart<1000)then;asize=1d2/scl%length
+       elseif(ipart<1500)then;asize=1d1/scl%length
+       elseif(ipart<2000)then;asize=1d0/scl%length
+       elseif(ipart<2500)then;asize=1d-1/scl%length
+       else;asize=1d-2/scl%length
+       endif
        part(ipart)%r=asize
        part(ipart)%d=zero
        part(ipart)%t=zero
@@ -973,16 +953,16 @@ endif
  integer::ipart
 !$OMP MASTER
  if(npart>0)then
-  do ipart=1,13
+  do ipart=1,npart,500
    if (ipart<=npart) then
 !
 !
 #ifdef THERMALHIST
-      print "(A10,I6,1X,10(1pe15.8))", "PARTICLE:",ipart,time,part(ipart)%x,part(ipart)%y, &
+      print "(A10,I6,1X,10(1pe16.8))", "PARTICLE:",ipart,time,part(ipart)%x,part(ipart)%y, &
         part(ipart)%z,part(ipart)%vx,part(ipart)%vy,part(ipart)%vz,&
         part(ipart)%d, part(ipart)%t,part(ipart)%p
 #else
-      print "(A10,I6,1X,7(1pe15.8))", "PARTICLE:",ipart,time,part(ipart)%x,part(ipart)%y, &
+      print "(A10,I6,1X,7(1pe16.8))", "PARTICLE:",ipart,time,part(ipart)%x,part(ipart)%y, &
         part(ipart)%z,part(ipart)%vx,part(ipart)%vy,part(ipart)%vz
 #endif /* end ifdef THERMALHIST */
 !
