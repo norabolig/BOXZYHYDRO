@@ -10,7 +10,7 @@ subroutine source
 !
 !
 #ifdef PARTICLE
- use particle() ! particle.f90
+ use particle, only : kick_particles, add_direct_togrid ! particle.f90
 #endif
 !
 !
