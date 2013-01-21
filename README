@@ -10,7 +10,9 @@ o After the code is compiled, run it using ./boxzy in.nml, where in.nml is the p
   this is set up for the Sod shock tube test.
 
 o After the simulation has finished, it will provide two outputs, celldump.00000001 and celldump.00000107, where
-  the numbers refer to the timestep.  Go into the analysis directory, and type
+  the numbers refer to the timestep. Please note that several additions have been made to the code, and your
+  test case may not end exactly at 107 -- the updated test case will be added soon, but the comparison will 
+  nonetheless be valid.  Go into the analysis directory, and type
 
   gfortran -o bin_to_ascii bin_to_ascii.f90
 
