@@ -1,5 +1,5 @@
 Multipurpose, radiation hydrodynamics code with self-gravity and the ability to track particles.
-The code also converts to a particle-particle-particle-in-cell code.  The is still in its test
+The code also converts to a particle-particle-particle-in-cell code.  The is still in a test
 phases.  
 
 o Type "make" to make with gcc.  
@@ -19,7 +19,7 @@ o After the simulation has finished, it will provide two outputs, celldump.00000
   This execultable will now take the formatted celldump files and turn them into ascii format for quick plotting use.
   Execute by typing
 
-  ./bin_to_ascii ../celdump.00000107 T > mysod.dat
+  ./bin_to_ascii ../celdump.00000375 T > mysod.dat
 
   Now GNUPLOT.
 
