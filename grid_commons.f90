@@ -10,10 +10,9 @@ module grid_commons
 
  real(pre)::dt,time
  real(pre),dimension(:),allocatable::p,adindx,muc_array
- real(pre),dimension(:),allocatable::phi,rhotot
+ real(pre),dimension(:),allocatable::phi,phi_new,rhotot
  real(pre),dimension(:,:),allocatable::u,qq,gforce,pforce
- real(pre),dimension(:,:),allocatable,target::cons_old,cons_new,cons
- real(pre),dimension(:,:),pointer::cons_pt
+ real(pre),dimension(:,:),allocatable::cons_old,cons,fluxtmp
  real(pre),dimension(:),allocatable::tk_table,rho_table,deng_eos_array
  real(pre),dimension(:,:),allocatable::gamma_table2,eng_table2,gamma_table,eng_table,p_table
  real(pre),dimension(:,:),allocatable::muc_table,muc_table2,tk_table2

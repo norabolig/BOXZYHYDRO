@@ -63,7 +63,7 @@ module utils
  end subroutine get_boundary
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! Get cell neighbors, excluding boundary and anchor cells.
+! Get cell neighbors, excluding anchor cells.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
  subroutine get_boundary_noanchor(igrid,b)
@@ -131,34 +131,34 @@ module utils
 
   if(x-grid(igrid)%x<zero )then
     if(y-grid(igrid)%y<zero) then
-      neigh(1)=igrid
-      neigh(2)=bb(4)
-      neigh(3)=grid(bb(4))%ineigh(2)
-      neigh(4)=bb(2)
-      neigh(5)=igridt
-      neigh(6)=bt(4)
-      neigh(7)=grid(bb(4))%ineigh(2)
-      neigh(8)=bt(2)
+      neigh(1)=grid(bb(2))%ineigh(4)
+      neigh(2)=bb(2)
+      neigh(3)=igrid
+      neigh(4)=grid(igrid)%ineigh(4)
+      neigh(5)=grid(bt(2))%ineigh(4)
+      neigh(6)=bt(2)
+      neigh(7)=igridt
+      neigh(8)=grid(igridt)%ineigh(4)
     else
-      neigh(1)=igrid
-      neigh(2)=bb(1)
-      neigh(3)=grid(bb(1))%ineigh(4)
-      neigh(4)=bb(4)
-      neigh(5)=igridt
-      neigh(6)=bt(1)
-      neigh(7)=grid(bb(1))%ineigh(4)
-      neigh(8)=bt(4)
+      neigh(1)=grid(igrid)%ineigh(4)
+      neigh(2)=igrid
+      neigh(3)=bb(1)
+      neigh(4)=grid(bb(1))%ineigh(4)
+      neigh(5)=grid(igridt)%ineigh(4)
+      neigh(6)=igridt
+      neigh(7)=bt(1)
+      neigh(8)=grid(bt(1))%ineigh(4)
     endif
   else
     if(y-grid(igrid)%y<zero) then
-      neigh(1)=igrid
-      neigh(2)=bb(2)
-      neigh(3)=grid(bb(2))%ineigh(3)
-      neigh(4)=bb(3)
-      neigh(5)=igridt
-      neigh(6)=bt(2)
-      neigh(7)=grid(bb(2))%ineigh(3)
-      neigh(8)=bt(3)
+      neigh(1)=bb(2)
+      neigh(2)=grid(bb(2))%ineigh(3)
+      neigh(3)=grid(igrid)%ineigh(3)
+      neigh(4)=igrid
+      neigh(5)=bt(2)
+      neigh(6)=grid(bt(2))%ineigh(3)
+      neigh(7)=grid(igridt)%ineigh(3)
+      neigh(8)=igridt
     else
       neigh(1)=igrid
       neigh(2)=bb(3)
@@ -166,7 +166,7 @@ module utils
       neigh(4)=bb(1)
       neigh(5)=igridt
       neigh(6)=bt(3)
-      neigh(7)=grid(bb(3))%ineigh(1)
+      neigh(7)=grid(bt(3))%ineigh(1)
       neigh(8)=bt(1)
     endif
    endif
@@ -238,64 +238,30 @@ module utils
  end function
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! Set ghost cells using the pointer variables
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
- subroutine set_ghost_cells_pt()
-  use grid_commons
-  use eos, only : get_gamma_from_tk
-  integer::igrid,idx,idim,ineigh,ix,iy,iz
-  real(pre)::v,eps,adloc,mucloc
-  type(units)::scale
-
-  call get_units(scale) ! units.f90
-
-!$OMP DO SCHEDULE(STATIC) PRIVATE(idx,ineigh,eps,mucloc,adloc,ix,iy,iz)
-  do igrid=1,nghost
-    idx=indx_ghost(igrid)
-    ix=grid(idx)%ix
-    iy=grid(idx)%iy
-    iz=grid(idx)%iz
-    ineigh=grid(idx)%ineigh(1)
-    ineigh=check_corner(ix,iy,iz,ineigh)
-
-    do idim=1,5
-      cons_pt(idim,idx)=cons_pt(idim,ineigh)
-    enddo
-  enddo
-!$OMP ENDDO
-!
-!
-#ifdef EXTRAANCHORS
-!$OMP DO SCHEDULE(STATIC) PRIVATE(idx)
-  do igrid=1,nanchor
-    idx=indx_anchor(igrid)
-    cons_pt(1,idx)=small_rho
-    cons_pt(2,idx)=zero
-    cons_pt(3,idx)=zero
-    cons_pt(4,idx)=zero
-    cons_pt(5,idx)=small_eps
-  enddo
-!$OMP ENDDO
-#endif /* end ifdef EXTRAANCHORS */
-!
-!
- end subroutine
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Set ghost cells 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ subroutine set_ghost_helper(idx,ip,fac)
+  use grid_commons
+  integer::idx,ip
+  real(pre)::fac(3)
+    cons(1,idx)= cons(1,ip)
+    cons(2,idx)= cons(2,ip)*fac(1)
+    cons(3,idx)= cons(3,ip)*fac(2)
+    cons(4,idx)= cons(4,ip)*fac(3)
+    cons(5,idx)= cons(5,ip)
+ end subroutine
 !
  subroutine set_ghost_cells()
   use grid_commons
   use eos, only : get_gamma_from_tk
-  integer::igrid,idx,idim,ineigh,ix,iy,iz
-  real(pre)::v,eps,ploc,mucloc,adloc
+  integer::igrid,idx,idim,ineigh,ix,iy,iz,ip
+  real(pre)::v,eps,ploc,mucloc,adloc,fac(3)
   type(units)::scale
 
   call get_units(scale) ! units.f90
 
-!$OMP DO SCHEDULE(STATIC) PRIVATE(idx,ineigh,eps,mucloc,adloc,ix,iy,iz)
+!$OMP DO SCHEDULE(STATIC) PRIVATE(idx,ineigh,eps,mucloc,adloc,ix,iy,iz,fac,ip)
   do igrid=1,nghost
     idx=indx_ghost(igrid)
     ix=grid(idx)%ix
@@ -303,12 +269,80 @@ module utils
     iz=grid(idx)%iz
     ineigh=grid(idx)%ineigh(1)
     ineigh=check_corner(ix,iy,iz,ineigh)
+ 
+       do idim=1,5
+         cons(idim,idx)=cons(idim,ineigh)
+       enddo
 
-    do idim=1,5
-      cons(idim,idx)=cons(idim,ineigh)
-    enddo
+       if(no_outflow_xl)then
+         fac(1:3)=one
+         fac(1)=-one 
+         if(ix==1)then
+           ip=nx*ny*(iz-1)+nx*(iy-1)+ix+3
+           call set_ghost_helper(idx,ip,fac)
+         elseif(ix==2)then
+           ip=nx*ny*(iz-1)+nx*(iy-1)+ix+1
+           call set_ghost_helper(idx,ip,fac)
+         endif
+       endif
+       if(no_outflow_xr)then
+         fac(1:3)=one
+         fac(1)=-one 
+         if(ix==nx)then
+           ip=nx*ny*(iz-1)+nx*(iy-1)+ix-3
+           call set_ghost_helper(idx,ip,fac)
+         elseif(ix==nx-1)then
+           ip=nx*ny*(iz-1)+nx*(iy-1)+ix-1
+           call set_ghost_helper(idx,ip,fac)
+         endif
+       endif
+       if(no_outflow_yl)then
+         fac(1:3)=one
+         fac(2)=-one 
+         if(iy==1)then
+           ip=nx*ny*(iz-1)+nx*((iy+3)-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         elseif(iy==2)then
+           ip=nx*ny*(iz-1)+nx*((iy+1)-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         endif
+       endif
+       if(no_outflow_yr)then
+         fac(1:3)=one
+         fac(2)=-one 
+         if(iy==ny)then
+           ip=nx*ny*(iz-1)+nx*((iy-3)-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         elseif(iy==ny-1)then
+           ip=nx*ny*(iz-1)+nx*((iy-1)-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         endif
+       endif
+       if(no_outflow_zl)then
+         fac(1:3)=one
+         fac(3)=-one 
+         if(iz==1)then
+           ip=nx*ny*(iz+3-1)+nx*(iy-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         elseif(iz==2)then
+           ip=nx*ny*(iz+1-1)+nx*(iy-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         endif
+       endif
+       if(no_outflow_zr)then
+         fac(1:3)=one
+         fac(3)=-one 
+         if(iz==nz)then
+           ip=nx*ny*(iz-3-1)+nx*(iy-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         elseif(iz==nz-1)then
+           ip=nx*ny*(iz-1-1)+nx*(iy-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         endif
+       endif
   enddo
 !$OMP ENDDO
+!$OMP BARRIER
 !
 !
 #ifdef EXTRAANCHORS
@@ -332,15 +366,32 @@ module utils
 ! Calculate gravitational force from grid.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
+ subroutine calc_gforce_helper(isten,b,igrid,im,ip)
+  use grid_commons, only : grid
+  integer::isten(5),b(6),igrid,im,ip
+  isten(3)=igrid
+  isten(4)=b(ip)
+  isten(5)=grid(b(ip))%ineigh(ip)
+  isten(2)=b(im)
+  isten(1)=grid(b(im))%ineigh(im)
+ end subroutine
+
  subroutine calc_gforce()
   use grid_commons
-  integer::igrid,b(6)
+  integer::igrid,b(6),sten(5)
 
 !$OMP DO SCHEDULE(STATIC) &
-!$OMP&PRIVATE(b)
+!$OMP&PRIVATE(b,sten)
   do igrid=1,ngrid
     if(grid(igrid)%boundary>0)cycle
     call get_boundary_wb(igrid,b)
+    
+!    call calc_gforce_helper(sten,b,igrid,4,3)
+!    gforce(1,igrid)=-(-phi(sten(5))+eight*phi(sten(4))-eight*phi(sten(2))+phi(sten(1)))/(12d0*dx)
+!    call calc_gforce_helper(sten,b,igrid,2,1)
+!    gforce(2,igrid)=-(-phi(sten(5))+eight*phi(sten(4))-eight*phi(sten(2))+phi(sten(1)))/(12d0*dy)
+!    call calc_gforce_helper(sten,b,igrid,6,5)
+!    gforce(3,igrid)=-(-phi(sten(5))+eight*phi(sten(4))-eight*phi(sten(2))+phi(sten(1)))/(12d0*dz)
 
     gforce(1,igrid)=-(phi(b(3))-phi(b(4)))/(two*dx)
     gforce(2,igrid)=-(phi(b(1))-phi(b(2)))/(two*dy)
@@ -472,18 +523,25 @@ module utils
 ! Left and Right states for central differencing.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
- subroutine left_right_states(f2,f1,f0,fm1,left,right)
-   real(pre),intent(in)::f2,f1,f0,fm1
-   real(pre),intent(out)::left,right
-   real(pre)::limit
+ real(pre) function genminmod(x1,x2,x3)
+    real(pre)::x1,x2,x3,tmp
+    if((x1>zero) .and. ((x2>zero) .and. (x3>zero)))then
+        tmp=min(x2,x3)
+        genminmod=min(x1,tmp)
+    else if((x1<zero) .and. ((x2<zero) .and. (x3<zero)))then
+        tmp=max(x2,x3)
+        genminmod=max(x1,tmp)
+    else
+        genminmod=zero
+    endif
+ end function
 
-   limit=flux_limiter(f1,f0,f2,f1)
-   right = f1-limit*half*(f2-f1)
-
-   limit=flux_limiter(f0,fm1,f1,f0)
-   left =  f0+limit*half*(f1-f0)
-
+ subroutine left_right_states(cm1,c0,c1,c2,c_l,c_r)
+    real(pre)::cm1,c0,c1,c2,c_l,c_r,tt=1.0d0
+    c_l=c0+half*genminmod(tt*(c0-cm1),half*(c1-cm1),tt*(c1-c0))
+    c_r=c1-half*genminmod(tt*(c1-c0),half*(c2-c0),tt*(c2-c1))
  end subroutine
+
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Another function like atan2
@@ -779,7 +837,7 @@ subroutine getBinaryPosition(tt,rBin,thetaBin,omegaBin, &
 !$OMP END MASTER 
 !$OMP BARRIER
 !$OMP DO SCHEDULE(STATIC) REDUCTION(+:mass,ekin,eint,amom,momx)        &
-!$OMP&REDUCTION(+:momy,momz,etot,egra,xcom,ycom,zcom)
+!$OMP&REDUCTION(+:momy,momz,etot,egra,xcom,ycom,zcom) PRIVATE(angle,x,y,z)
    do igrid=1,ngrid
     if(grid(igrid)%boundary>0)cycle
     x=grid(igrid)%x
@@ -814,6 +872,28 @@ subroutine getBinaryPosition(tt,rBin,thetaBin,omegaBin, &
 !$OMP END MASTER
 #endif /* end ifdef VERBOSE */
 !
+!
+ end subroutine
+
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Calculate total energy. Used for correction
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ subroutine get_etot(e,m,f)
+   use grid_commons
+   real(pre)::e,m,f
+   integer::igrid
+!
+!$OMP DO SCHEDULE(STATIC)REDUCTION(+:e,m,f)
+   do igrid=1,ngrid
+    if(grid(igrid)%boundary>0)cycle
+    m=m+cons(1,igrid)*dx*dy*dz
+    f=f+cons(1,igrid)*dx*dy*dz*abs(u(1,igrid)*gforce(1,igrid)+u(2,igrid)*gforce(2,igrid)+&
+      u(3,igrid)*gforce(3,igrid))
+    e=e+(cons(5,igrid)+half*(cons(1,igrid)*phi(igrid)))*dx*dy*dz
+   enddo
+!$OMP ENDDO
 !
  end subroutine
 

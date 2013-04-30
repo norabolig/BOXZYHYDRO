@@ -22,6 +22,7 @@ module particle
  type(particle_type),dimension(:),allocatable::part,part_direct
  real(pre)::prate,ds
  integer::nact1,nact2
+ type(units)::scl
 
  contains
 !
@@ -94,8 +95,8 @@ module particle
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
  subroutine initialize_particles()
-  integer::ipart,id,iseed=314,istat,step
-  real(pre)::dphi,r,z,rpoly=12.,momx,momy,mass
+  integer::ipart,id,iseed=314,istat,step,isize
+  real(pre)::dphi,r,z,rpoly=12.,momx,momy,mass,afit,bfit,cfit,r_ran,theta_ran,phi_ran
   real(pre)::vcyl,vr,fexp,vz,vx,vy,x,y,m,soft,dtheta,theta,vt,a,ecc
 !
 !
@@ -107,7 +108,6 @@ module particle
   logical::active
   character*8::cindx
   character*17::filename
-  type(units)::scl
 
   call get_units(scl)
   
@@ -205,6 +205,7 @@ module particle
   if(npart_direct>0)allocate(part_direct(npart_direct))
   call srand(iseed)
   id=0
+  isize=1
 
   if(npart>0)then
   do ipart=1,npart
@@ -214,14 +215,28 @@ module particle
 ! The following is special use, and should be setup according to the user.
 ! Will make this a separate file.
 !***
-!
-   r=1d0!+sqrt(rand())*4*dx
-   dphi=two*pi*rand()
-   theta=acos(one-two*rand())
-   part(ipart)%x=r*sin(theta)*cos(dphi)
-   part(ipart)%y=r*sin(theta)*sin(dphi)
-   part(ipart)%z=r*cos(theta)
-   part(ipart)%m=1d-40
+
+   afit=0.00893405
+   bfit=-4.5
+   cfit=2.0
+
+   if (isize>3)then
+    r_ran=1.5d0+0.1*rand()**(1./3.)
+   else
+    r_ran = (log(one-rand())/bfit)**(one/cfit)
+   endif
+   theta_ran=acos(one-two*rand())   
+   phi_ran=two*pi*rand()
+
+   part(ipart)%x=r_ran*cos(phi_ran)*sin(theta_ran)
+   part(ipart)%y=r_ran*sin(phi_ran)*sin(theta_ran)
+   part(ipart)%z=r_ran*cos(theta_ran)
+!   if(ipart==1)then
+!     part(ipart)%x=zero
+!     part(ipart)%y=zero
+!     part(ipart)%z=zero
+!   endif
+   part(ipart)%m=pmass_factor/dble(NPART)
    part(ipart)%vy=zero
    part(ipart)%vx=zero
    part(ipart)%vz=0.0
@@ -233,12 +248,21 @@ module particle
 !
 #ifdef WITHDRAG
        part(ipart)%rho0=3./scl%density
-       if (ipart<500)then;asize=1d5/scl%length
-       elseif(ipart<1000)then;asize=1d2/scl%length
-       elseif(ipart<1500)then;asize=1d1/scl%length
-       elseif(ipart<2000)then;asize=1d0/scl%length
-       elseif(ipart<2500)then;asize=1d-1/scl%length
-       else;asize=1d-2/scl%length
+       if(isize==1)then
+           asize=1d-4/scl%length
+           isize=isize+1
+       elseif(isize==2)then
+           asize=1d-2/scl%length
+           isize=isize+1
+       elseif(isize==3)then
+           asize=1d0/scl%length
+           isize=isize+1
+       elseif(isize==4)then
+           asize=1d2/scl%length
+           isize=isize+1
+       else
+           asize=1d3/scl%length
+           isize=1
        endif
        part(ipart)%r=asize
        part(ipart)%d=zero
@@ -455,15 +479,14 @@ module particle
     x=part(ipart)%x
     y=part(ipart)%y
     z=part(ipart)%z
-    d=part(ipart)%m/vol
+    d=part(ipart)%m/vol ! *100 ! 100 is for dust to gas ratio
 
     call get_weights_8(ig,x,y,z,w)
     if(ig(1)==-1)then
-       print *, "Removing Particle :", ipart,x,y,z
+       print *, "Removing Particle :", ipart,x/dx,y/dy,z/dz
        part(ipart)%active=.false.
        cycle
     endif 
- 
     do iter=1,8
 !$OMP ATOMIC
       rhotot(ig(iter))=rhotot(ig(iter))+d*w(iter)
@@ -551,13 +574,21 @@ module particle
  subroutine kick_particles(t)
   integer::ipart,ig(8),iter
   real(pre),intent(in)::t
-  real(pre)::x,y,z,vx,vy,vz,fx,fy,fz
+  real(pre)::x,y,z,vx,vy,vz,fx,fy,fz,de,ekin,t0,tR
   real(pre)::w(8),azimuth
   real(pre)::dfx,dfy,dfz,d,pg,tg,dg,vol,rhoa,asize,d_loc,tdrag
-  real(pre)::pfx,pfy,pfz,alpha_loc
+  real(pre)::pfx,pfy,pfz,alpha_loc,omega,omega2
   integer::niter,idrag
-  vol=dx*dy*dz
 
+#ifdef ROTATE
+  real(pre)::x0
+      x0=object_x_displace
+      omega2=(object_mass)/abs(object_x_displace)**3
+      omega=sqrt(omega2)
+#endif
+  vol=dx*dy*dz
+!
+!
   if(npart>0)then
 !
 !
@@ -568,7 +599,7 @@ module particle
 !
 !$OMP DO SCHEDULE(STATIC)                                               &
 !$OMP&PRIVATE(x,y,z,vx,vy,vz,fx,fy,fz,ig,w,pfx,pfy,pfz,rhoa,d)          &
-!$OMP&PRIVATE(tg,pg,dg,alpha_loc,asize)
+!$OMP&PRIVATE(tg,pg,dg,alpha_loc,asize,de,ekin,t0,tR)
   do ipart=1,npart
     if(.not.part(ipart)%active)cycle
     x=part(ipart)%x
@@ -583,7 +614,7 @@ module particle
 
     call get_weights_8(ig,x,y,z,w)
     if(ig(1)==-1)then
-       print *, "Removing Particle :", ipart,x,y,z
+       print *, "Removing Particle :", ipart,x/dx,y/dy,z/dz
        part(ipart)%active=.false.
        cycle
     endif 
@@ -593,6 +624,13 @@ module particle
      fy=fy+gforce(2,ig(iter))*w(iter)
      fz=fz+gforce(3,ig(iter))*w(iter)
     enddo
+
+#ifdef ROTATE
+     fx=fx+two*vy*omega
+     fx=fx-1.5d0*omega*y/x0*x0dot
+     fy=fy-two*vx*omega
+     fy=fy+1.5d0*omega*x/x0*x0dot
+#endif
 
     vx=vx+fx*t
     vy=vy+fy*t
@@ -614,22 +652,31 @@ module particle
     rhoa=part(ipart)%rho0
     asize=part(ipart)%r
     call get_drag(dfx,dfy,dfz,tg,pg,dg,x,y,z,vx,vy,vz, &
-                  d,rhoa,asize,ig,w,t,pfx,pfy,pfz,alpha_loc) ! pdrag.f90
+                  d,rhoa,asize,ig,w,t,pfx,pfy,pfz,alpha_loc,de) ! pdrag.f90
  
+    de=max(de,zero)
     do iter=1,8
+     ekin=half*(cons(2,ig(iter))**2+cons(3,ig(iter))**2+cons(4,ig(iter))**2)/cons(1,ig(iter))
+!$OMP ATOMIC
+     cons(5,ig(iter))=cons(5,ig(iter))-ekin
 !$OMP ATOMIC
      cons(2,ig(iter))=cons(2,ig(iter))-d*dfx*w(iter)*t! set to zero for step in calc_force
 !$OMP ATOMIC
      cons(3,ig(iter))=cons(3,ig(iter))-d*dfy*w(iter)*t ! set to zero for step in calc_force
 !$OMP ATOMIC
      cons(4,ig(iter))=cons(4,ig(iter))-d*dfz*w(iter)*t ! set to zero for step in calc_force
+!
+     ekin=half*(cons(2,ig(iter))**2+cons(3,ig(iter))**2+cons(4,ig(iter))**2)/cons(1,ig(iter))
+!$OMP ATOMIC
+     cons(5,ig(iter))=cons(5,ig(iter))+ekin+(dg)*de*w(iter)
     enddo
 
     vx=vx+(dfx)*t
     vy=vy+(dfy)*t
     vz=vz+(dfz)*t
-!
-!
+
+    part(ipart)%t=tg
+
 #ifdef THERMALHIST
     part(ipart)%t=tg
     part(ipart)%p=pg
@@ -644,6 +691,10 @@ module particle
 !
 #endif /* end ifdef WITHDRAG */
 !
+!
+#ifdef ZERO_OUT_Z
+    vz=zero
+#endif
 !
     part(ipart)%vx=vx
     part(ipart)%vy=vy
@@ -665,7 +716,7 @@ module particle
 !$OMP BARRIER
 !$OMP DO SCHEDULE(STATIC)                                               &
 !$OMP&PRIVATE(x,y,z,vx,vy,vz,fx,fy,fz,ig,w,pfx,pfy,pfz,rhoa,d)          &
-!$OMP&PRIVATE(tg,pg,dg,alpha_loc,asize)
+!$OMP&PRIVATE(tg,pg,dg,alpha_loc,asize,de)
   do ipart=1,npart_direct
     if(.not.part_direct(ipart)%active)cycle
     vy=part_direct(ipart)%vy
@@ -682,7 +733,7 @@ module particle
  
     call get_weights_8(ig,x,y,z,w)
     if(ig(1)==-1)then
-       print *, "Removing Particle :", ipart,x,y,z
+       print *, "Removing Particle :", ipart,x/dx,y/dy,z/dz
        part_direct(ipart)%active=.false.
        cycle
     endif 
@@ -692,6 +743,15 @@ module particle
      fy=fy+gforce(2,ig(iter))*w(iter)
      fz=fz+gforce(3,ig(iter))*w(iter)
     enddo
+
+#ifdef ROTATE
+     fx=fx+two*vy*omega
+     fx=fx-1.5d0*omega*y/x0*x0dot
+     fy=fy-two*vx*omega
+     fy=fy+1.5d0*omega*x/x0*x0dot
+#endif
+
+
 
     vx=vx+fx*t
     vy=vy+fy*t
@@ -712,7 +772,7 @@ module particle
     rhoa=part_direct(ipart)%rho0
     asize=part_direct(ipart)%r
     call get_drag(dfx,dfy,dfz,tg,pg,dg,x,y,z,vx,vy,vz, &
-                  d,rhoa,asize,ig,w,t,pfx,pfy,pfz,alpha_loc)
+                  d,rhoa,asize,ig,w,t,pfx,pfy,pfz,alpha_loc,de)
 
     do iter=1,8
 !$OMP ATOMIC
@@ -953,8 +1013,9 @@ endif
  integer::ipart
 !$OMP MASTER
  if(npart>0)then
-  do ipart=1,npart,500
-   if (ipart<=npart) then
+  do ipart=1,5!npart
+!   if (ipart==51) then
+   !if (ipart<=npart) then
 !
 !
 #ifdef THERMALHIST
@@ -967,7 +1028,7 @@ endif
 #endif /* end ifdef THERMALHIST */
 !
 !
-   endif
+!   endif
   enddo
  endif
 !$OMP END MASTER

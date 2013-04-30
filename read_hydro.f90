@@ -53,7 +53,7 @@ else
       read(100),x,y,z,&
          cons(1,igrid),p(igrid),&
          u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),ibd
-      if (abs(z)>dz*dble(nz-1)*half)cycle
+      !if (abs(z)>dz*dble(nz-1)*half)cycle
       igrid=igrid+1
  enddo
 !
@@ -79,7 +79,12 @@ else
       read(100),x,y,z,&
          cons(1,igrid),p(igrid),&
         u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),cons(5,igrid),muc_array(igrid),ibd
-      if (abs(z)>dz*dble(nz-1)*half)cycle
+      !if (abs(z)>dz*dble(nz-1)*half)cycle
+      !cons(1,igrid)=cons(1,igrid)*(one+0.1*(one-two*rand())) 
+      !u(1,igrid)=u(1,igrid)+0.01d0*(one-two*rand())
+      !u(2,igrid)=u(2,igrid)+0.01d0*(one-two*rand())
+      !u(3,igrid)=u(3,igrid)+0.01d0*(one-two*rand())
+      !cons(1,igrid)=cons(1,igrid)*(one+(one-two*rand())*0.25)
       igrid=igrid+1
  enddo
 !

@@ -4,9 +4,9 @@ write_ascii=.false.
 
 &grid_params
 yoffset=0d0
-dx=0.1d0
-dy=0.1d0
-dz=0.1d0
+dx=0.01d0
+dy=0.01d0
+dz=0.01d0
 nx=8
 ny=200
 nz=8
@@ -16,7 +16,7 @@ yoffset=0d0
 
 &hydro
 starttime=0
-endtime=4.
+endtime=0.4
 irestart=0
 dtout=4.
 small_rho=1d-12
@@ -35,7 +35,7 @@ miniter=10
 H2STAT=-1
 ac=1d0
 bc=3d0
-gammafix=1.666666666667
+gammafix=1.4d0
 tk_bgrnd=0.000000000001
 dTk_eos=3d1
 /

@@ -27,10 +27,10 @@ subroutine init_conditions()
   x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
   phi(igrid)=zero
   
-  if(y>zero)then ! change flow direction here
+  if(y<zero)then ! change flow direction here
    cons(1,igrid)=one
    p(igrid)=one
-   adindx(igrid)=five/three
+   adindx(igrid)=gammafix
    cons(5,igrid)=p(igrid)/(adindx(igrid)-one)
    cons(2,igrid)=zero
    cons(3,igrid)=zero
@@ -41,7 +41,7 @@ subroutine init_conditions()
   else
    cons(1,igrid)=0.125
    p(igrid)=one/ten
-   adindx(igrid)=five/three
+   adindx(igrid)=gammafix
    cons(5,igrid)=p(igrid)/(adindx(igrid)-one)
    cons(2,igrid)=zero
    cons(3,igrid)=zero

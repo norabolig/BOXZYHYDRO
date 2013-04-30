@@ -42,16 +42,18 @@ program boxzyhydro
 
  integer::igrid,idim,step,idx,ibd,ipart
  real(pre)::angle,x,y,z,phian,r
- real(pre)::nextstop,cons_swap,f1,max_den_change_loc,allow=0.01,timer_start,timer_stop
- real(pre)::max_den_loc,min_den_old_loc,min_den_loc,max_den_old_loc,dtold
+ real(pre)::nextstop,f1,timer_start,timer_stop
+ real(pre)::dtold
  real(pre)::saback,safron,satop,sabot,pback,pfron,ptop,pbot,rhoav,vxav,avcount,chord=150d0
+ real(pre)::etot_loc,mass_loc
+ real(pre)::etot_loc0,mass_loc0,eloss_tot,ediff,factor,f_loc,f_loc0
  type(units)::scale
  character*8::cindx
  character*17::filename
  character*80::namelist_file
  integer::iter
 
- logical:: checkden=.false.
+ logical:: checkden=.false.,perturb=.false.
 
 ! debugging declarations
  real(pre)::testphi,xx,yy,zz
@@ -191,10 +193,14 @@ do
  if(time>=endtime.or.step>=1000000)exit ! master loop control
  step=step+1
 
- max_den_old_loc=zero
+ etot_loc=zero;mass_loc=zero
+ etot_loc0=zero;mass_loc0=zero
+ f_loc=zero;f_loc0=zero
+ eloss_tot=zero
 !$OMP PARALLEL DEFAULT(SHARED) private(x,y,z,angle)                    
 #ifndef NOHYDRO
   call conservation_diagnostic() ! in utils.f90 xcom,ycom,zcom defined in utils
+  call get_etot(etot_loc0,mass_loc0,f_loc0)
 !
 !
 #ifdef SUPPRESSDRIFT
@@ -202,34 +208,7 @@ do
 #endif 
 !
 !
-!$OMP DO SCHEDULE(STATIC) REDUCTION(max:max_den_old_loc)
- do igrid=1,ngrid
-  max_den_old_loc=max(max_den_old_loc,cons(1,igrid))
- enddo
-!$OMP ENDDO
-!$OMP MASTER
-  min_den_old_loc=max_den_old_loc
-!$OMP END MASTER
-!$OMP DO SCHEDULE(STATIC) REDUCTION(min:min_den_old_loc)
- do igrid=1,ngrid
-  min_den_old_loc=min(min_den_old_loc,cons(1,igrid))
- enddo
-!$OMP ENDDO
 !
-!$OMP DO SCHEDULE(STATIC)
- do igrid=1,ngrid
-!*** Following is used for testing
-!if(mod(step,25)==zero.and.time<250)then;cons(2:4,igrid)=zero
-!  elseif(mod(step,50)==zero.and.time<500)then;cons(2:4,igrid)=zero
-!  elseif(mod(step,100)==zero.and.time<1000)then;cons(2:4,igrid)=zero
-!  elseif(mod(step,200)==zero.and.time<1500)then;cons(2:4,igrid)=zero
-!  endif
- do idim=1,5
-   cons_old(idim,igrid)=cons(idim,igrid)
- enddo
- enddo
-!$OMP ENDDO
-
  call state() ! state.f90
 
 !$OMP BARRIER
@@ -266,8 +245,8 @@ do
 !
 !$OMP MASTER  
  dt=dt*f1
- if(step==1)dt=1d-3*dt ! use this with caution.  It is best for models that are not quite in equilibrium
-                       ! and need a kick-start for stability.
+! if(step==1)dt=1d-3*dt ! use this with caution.  It is best for models that are not quite in equilibrium
+!                       ! and need a kick-start for stability.
  if(step>1.and.dtold>zero)dt=min(dt,dtold*1.1d0)
  dtold=dt
 !
@@ -290,7 +269,6 @@ do
  call source() ! source.f90, apply forces
 !$OMP BARRIER
 !
-!
 #ifndef NOHYDRO
 !
 !
@@ -298,7 +276,20 @@ do
  call mcrtfld_transfer ! mcrtfld.f90
 !$OMP BARRIER
 #endif
+!$OMP MASTER
+#ifdef MCFLDRT
+ eloss_tot=eloss_tot+total_cool
+#else
+ eloss_tot=zero
+#endif
+!$OMP END MASTER
 !
+!
+ call set_ghost_cells() ! utils.f90, user can set special boundary conditions.
+!$OMP BARRIER
+ call state()
+!$OMP BARRIER
+! 
 !
  call velocity() ! velocity.f90
 !$OMP BARRIER
@@ -312,7 +303,7 @@ do
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
  do idim=1,5
-   cons_new(idim,igrid)=cons(idim,igrid)
+   cons_old(idim,igrid)=cons(idim,igrid)
  enddo
  enddo
 !$OMP ENDDO
@@ -323,116 +314,39 @@ do
 !
 #ifndef NOHYDRO
 !
-!***
-! Point to the flux variable that will be used as the base for the updates
-! during fluxing, i.e., cons = flux(cons_pt). 
-!***
-!
- cons_pt=>cons
 
- call flux() ! flux.f90
+ dt=dt*two
+ call flux(0) ! flux.f90
 
 !$OMP PARALLEL 
 !
  call set_ghost_cells() ! utils.f90, user can set special boundary conditions.
-!
 !$OMP BARRIER
+ call state()
+!$OMP BARRIER
+ call velocity()
 !
 !***
-! half fluxing complete.  Now check for changes in density field, and limit
+! first fluxing complete.  Now check for changes in density field, and limit
 ! evolution accordingly. This helps with code stability when self-gravity
 ! is used. Perhaps this will be moved into a separate function later.
 !***
 !
-!$OMP DO SCHEDULE(STATIC) REDUCTION(max:max_den_loc)
- do igrid=1,ngrid
-  max_den_loc=max(max_den_loc,cons(1,igrid))
- enddo
-!$OMP ENDDO
-!
-!$OMP MASTER
-  min_den_loc=max_den_loc
-!$OMP END MASTER
-!
-!$OMP BARRIER
-!
-!$OMP DO SCHEDULE(STATIC) REDUCTION(min:min_den_loc)
- do igrid=1,ngrid
-  min_den_loc=min(min_den_loc,cons(1,igrid))
- enddo
-!$OMP ENDDO
-!
-!$OMP MASTER
- f1_cycle=.false.
- max_den_change_loc=abs(one-max_den_loc/max_den_old_loc)
- max_den_change_loc=max(max_den_change_loc,abs(one-min_den_loc/min_den_old_loc))
-!
- if(checkden.and.max_den_change_loc>allow)then
-   f1=f1*half !allow/max_den_change_loc*f1*half
-   print *, "# Density change of ",  max_den_change_loc, " detected. Allowing ", allow,".",f1
-   f1_cycle=.true.
- else
-   f1=min(f1*1.1d0,one)
- endif
-!
-!$OMP END MASTER
-!
-!$OMP BARRIER
-!
- if(f1_cycle)then
-!
-!$OMP DO SCHEDULE(STATIC)
- do igrid=1,ngrid
-  do idim=1,5
-    cons(idim,igrid)=cons_old(idim,igrid)
-  enddo
- enddo
-!$OMP ENDDO
-!
- call velocity() ! velocity.f90
-!
- endif
-!
 !$OMP END PARALLEL
 !
-if(f1_cycle)cycle
+ call flux(1)
 
 !$OMP PARALLEL DEFAULT(SHARED) 
 !
- call velocity() ! velocity.f90
+ call set_ghost_cells() ! utils.f90, user can set special boundary conditions.
+!$OMP BARRIER
+ call state()
+!$OMP BARRIER
+ call velocity()
 !
 !$OMP END PARALLEL
 !
 #endif  /* end ifndef NOHYDRO */
-!
-!
- dt=two*dt 
-!
-!***
-! Now take a full step based on quantities at the half step.
-!***
-!
-!
-#ifndef NOHYDRO
-!
-!
- cons_pt=>cons_new
- call flux() ! flux.f90
-!
-!$OMP PARALLEL DEFAULT(SHARED) 
-!$OMP DO SCHEDULE(STATIC)
-  do igrid=1,ngrid
-   do idim=1,5
-    cons(idim,igrid)=cons_pt(idim,igrid)
-   enddo
-  enddo
-!$OMP ENDDO
- call set_ghost_cells() ! utils.f90
-!$OMP END PARALLEL
-!
-!
-#endif /* end ifndef NOHYDRO */
-!
 !
 !$OMP PARALLEL
 !
@@ -524,10 +438,6 @@ if(f1_cycle)cycle
 !
 !
 !$OMP PARALLEL DEFAULT(SHARED) 
-#ifndef NOHYDRO
- call velocity() ! update from last flux.  Done after self-gravity.
- call state() ! state.f90
-#endif /* end ifndef NOHYDRO */
 !
 !
  call source() ! source.f90
@@ -539,9 +449,40 @@ if(f1_cycle)cycle
 #ifdef RADTRAN
  call mcrtfld_transfer() ! mcrtfld.f90
 #endif
+!$OMP MASTER
+#ifdef MCFLDRT
+ eloss_tot=eloss_tot+total_cool
+#else
+ eloss_tot=zero
+#endif
+!$OMP END MASTER
 !
 !
+ call set_ghost_cells() ! utils.f90, user can set special boundary conditions.
+!$OMP BARRIER
+ call state()
+!$OMP BARRIER
  call velocity() ! velocity.f90
+!
+#ifdef SELFGRAVITY
+#ifdef ENERGYCOR
+ call get_etot(etot_loc,mass_loc,f_loc)
+!$OMP BARRIER
+!$OMP MASTER
+ print *, etot_loc0,etot_loc,mass_loc0,mass_loc,eloss_tot
+ ediff=(etot_loc-etot_loc0-eloss_tot)/f_loc
+!$OMP END MASTER
+!$OMP BARRIER
+!$OMP DO SCHEDULE(STATIC) PRIVATE(factor)
+ do igrid=1,ngrid
+    factor=cons(1,igrid)*abs(u(1,igrid)*gforce(1,igrid)+u(2,igrid)*gforce(2,igrid)+&
+      u(3,igrid)*gforce(3,igrid))*mass_loc/mass_loc0
+    cons(5,igrid)=max(cons(5,igrid)-ediff*factor,small_eps)
+ enddo
+!$OMP ENDDO
+#endif /* end ifdef ENERGYCOR */
+#endif /* end ifdef SELFGRAVITY */
+!
 !
 !
 #endif /* end ifndef NOHYDRO */
@@ -554,10 +495,12 @@ if(f1_cycle)cycle
  time=time+dt
 !
 !
+#ifndef NOWRITEOUT
  if((time>=nextstop.or.time==endtime))then
    call write_files(step) ! write_files.f90
    nextstop=nextstop+dtout
  endif
+#endif /* end ifndef NOWRITEOUT */
 
 enddo ! end of the major loop. Continue loop until final time or max steps is reached.
 call cpu_time(timer_stop)

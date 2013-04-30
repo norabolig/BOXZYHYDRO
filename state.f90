@@ -40,7 +40,7 @@ subroutine state
    ekin=cons(1,igrid)*half*(u(1,igrid)**2+u(2,igrid)**2+u(3,igrid)**2)
 !
 !
-#ifdef POLY
+#ifdef POLYEOS
   p(igrid)=(kpoly*cons(1,igrid)**gammafix)
   adindx(igrid)=gammafix
   muc_array(igrid)=muc

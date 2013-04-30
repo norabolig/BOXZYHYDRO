@@ -13,13 +13,13 @@ module selfgravity
  implicit none
 
  type(gravcell),dimension(:),allocatable,save::grav_grid
- real(pre),dimension(:),allocatable,save::gdy,gdx,gdz,gravrho,phi_new
+ real(pre),dimension(:),allocatable,save::gdy,gdx,gdz,gravrho
  real(pre)::mbox,xcom_grid,ycom_grid,zcom_grid
- real(pre)::abin=40.,ebin=0.0d0,mbin=1d0
+ real(pre)::abin=20.,ebin=0.0d0,mbin=1d0
  integer,dimension(:),allocatable,save::gny,gnx,gnz,ngrav_grid,grav_bound_indx,ngrav_bound
  integer,save::nchild=8,nlevel=4,nmulti=1
 
- real*8,save::thetaopen=0.8d0
+ real*8,save::thetaopen=0.7d0
 
  contains
 !
@@ -56,7 +56,7 @@ subroutine init_grav_grid
  integer::ilevel2,iskip2,inode,ichild,ibound,tbound
  real(pre)::x,y,z,xg,yg,zg,dist,boxx,boxy,boxz,yoff=zero
 
- allocate(phi_new(ngrid))
+!!!!!! allocate(phi_new(ngrid))
  allocate(gdx(nlevel))
  allocate(gdy(nlevel))
  allocate(gdz(nlevel))
@@ -152,7 +152,7 @@ subroutine init_grav_grid
      ileaf= grav_grid(inode+iskip)%ichild(ichild)
      if(ileaf==0)then
        grav_grid(inode+iskip)%ichild(ichild)=igrid
-       if(grid(igrid)%boundary>0)then
+       if(grid(igrid)%boundary==1.or.grid(igrid)%boundary==2)then
           grav_grid(inode+iskip)%boundary=.true.
        endif
        nleaf=nleaf+1
@@ -455,6 +455,39 @@ subroutine get_pot_bc_from_tree
    phi(igrid)=phi_loc
  enddo
 !$OMP ENDDO
+!#ifdef EXTRAANCHORS
+!!$OMP DO SCHEDULE(dynamic)
+!  do ibound=1,nanchor
+!   igrid=indx_anchor(ibound)
+!   phi_loc=zero
+!   x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
+!   iskip=0
+!   do ilevel=1,nlevel-1
+!     iskip=iskip+ngrav_grid(ilevel)
+!   enddo
+!   ilevel=nlevel
+!   do inode=1,ngrav_grid(ilevel)
+!    xx=grav_grid(inode+iskip)%xcm;yy=grav_grid(inode+iskip)%ycm;zz=grav_grid(inode+iskip)%zcm
+!    r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
+!    flag=0
+!    if(r>zero)then
+!     theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+!     if(theta>thetaopen)flag=1
+!    else
+!     flag=1
+!    endif
+!    if(flag==0)then
+!      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
+!    else
+!      indx=inode+iskip !grav_grid(inode)%id
+!      l=ilevel
+!      call gather_pot(phi_loc,x,y,z,indx,l,1)
+!    endif
+!   enddo
+!   phi(igrid)=phi_loc
+! enddo
+!!$OMP ENDDO
+!#endif
 !$OMP END PARALLEL
 end subroutine
 !
@@ -785,9 +818,9 @@ end function
 !$OMP BARRIER
     enddo
   else
-   print *,"ERROR: Trying to do multiple V passes."
-   print *,"Currently set for single V pass with cascading solution."
-   stop "Stopping in walk_the_V"
+   !print *,"ERROR: Trying to do multiple V passes."
+   !print *,"Currently set for single V pass with cascading solution."
+   !stop "Stopping in walk_the_V"
   endif
 !$OMP END PARALLEL
 
@@ -802,11 +835,12 @@ end function
       iter=0
 !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(err_loc,iter) 
       err_loc=maxerr
-      do while (err_loc>grav_err_tol_low*half**ilevel)
+      do while (err_loc>grav_err_tol_low)
 !$OMP BARRIER
 !$OMP MASTER
         maxerr=zero
 !$OMP END MASTER
+!$OMP BARRIER
         iter=iter+1
         call sor_potential_coarse(ilevel,err_loc)
 !$OMP ATOMIC
@@ -836,7 +870,7 @@ end function
       else
         do ichild=1,nchild
          indx=grav_grid(id)%ichild(ichild)
-         if(grid(indx)%boundary>0)cycle
+         if(grid(indx)%boundary==1.or.grid(indx)%boundary==2)cycle
          phi0=project_phi_from_coarse(ilevel,id,iskip,grid(indx)%x,grid(indx)%y,grid(indx)%z)
          phi(indx)=phi0
         enddo
@@ -933,7 +967,8 @@ end function
   do while (iter<maxiter)
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:maxerr)
    do igrid=1,ngrid
-     if(grid(igrid)%boundary>0)cycle
+     if(grid(igrid)%boundary==1.or.grid(igrid)%boundary==2)cycle
+     !if(grid(igrid)%boundary>0)cycle
      call get_boundary_wb(igrid,b) 
 
       resid=( (phi(b(1))+phi(b(2)))*dx*dz/dy+(phi(b(3))+phi(b(4)))*dy*dz/dx &
@@ -951,7 +986,8 @@ end function
    maxerr_loc=maxerr
 !$OMP DO  SCHEDULE(STATIC) 
    do igrid=1,ngrid
-     if(grid(igrid)%boundary>0)cycle ! don't change the boundary or anchor  potential!
+     !if(grid(igrid)%boundary>0)cycle ! don't change the boundary or anchor  potential!
+     if(grid(igrid)%boundary==1.or.grid(igrid)%boundary==2)cycle
        phi(igrid)=phi_new(igrid)!phi(igrid)+((alpha)*phi_new(igrid)) ! subtract residual
    enddo
 !$OMP ENDDO
@@ -976,20 +1012,23 @@ end function
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
  subroutine vcycle_pot()
-   integer::iter
+   integer::iter,iter2
    logical first
 
    iter=0
    maxerr=1d6
    first=.true.
-   do while (maxerr>grav_err_tol.and.iter<1000)
+   !do while (maxerr>grav_err_tol.and.iter<3)
+   do while (iter<1)
      call walk_the_V(first)
      iter=iter+1
      first=.false.
    print *, "Walking the V (iter,maxerr): ",iter,maxerr
    enddo
-   call sor_potential2(iter)
-   print *, "Refining on fine grid (iter,maxerr): ",iter,maxerr
+   iter2=0
+   maxerr=1d6
+   call sor_potential2(iter2)
+   print *, "Refining on fine grid (iter,maxerr): ",iter2,maxerr
 
  end subroutine
 !
@@ -1020,14 +1059,16 @@ end function
 !$OMP BARRIER
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:maxerr)
    do igrid=1,ngrid
-     if(grid(igrid)%boundary>0)cycle
+     !if(grid(igrid)%boundary>0)cycle
+     if(grid(igrid)%boundary==1.or.grid(igrid)%boundary==2)cycle
      call get_boundary_wb(igrid,b) 
 
       resid=( (phi(b(1))+phi(b(2)))*dx*dz/dy+(phi(b(3))+phi(b(4)))*dy*dz/dx &
            +(phi(b(5))+phi(b(6)))*dx*dy/dz &
            - phi(igrid)*denom-four*pi*rhotot(igrid)*dx*dy*dz )/(denom)
 
-      phi_new(igrid)=phi(igrid)+resid*0.5d0
+      phi_new(igrid)=phi(igrid)+resid*0.99d0
+      !phi_new(igrid)=phi(igrid)+resid*0.5d0
 
      err_loc = abs( resid/(phi(igrid)))
      maxerr=max(err_loc,maxerr)
@@ -1038,7 +1079,8 @@ end function
    maxerr_loc=maxerr
 !$OMP DO  SCHEDULE(STATIC) 
    do igrid=1,ngrid
-     if(grid(igrid)%boundary>0)cycle ! don't change the boundary or anchor  potential!
+     !if(grid(igrid)%boundary>0)cycle ! don't change the boundary or anchor  potential!
+     if(grid(igrid)%boundary==1.or.grid(igrid)%boundary==2)cycle
        phi(igrid)=phi_new(igrid)!phi(igrid)+((alpha)*phi_new(igrid)) ! subtract residual
    enddo
 !$OMP ENDDO
@@ -1063,29 +1105,28 @@ end function
 !
  subroutine external_phi()! simple Roche potential
   integer::igrid
-  real(pre)::x,y,z,rbin,rcylbin,omega2,pert
+  real(pre)::x,y,z,omega2,pert
   real(pre)::x0,y0,z0,mbin,mbox
-  real(pre)::xcom,ycom,zcom,plan,soft,r
+  real(pre)::xcom,ycom,zcom,plan,soft,r,rcycl
 
 
-!$OMP PARALLEL DEFAULT(PRIVATE) SHARED(grid,phi,ngrid,dx,abin)
-  mbox=6.5d-8
+  x0=abs(object_x_displace)
+  omega2=object_mass/x0**3
+  x0dot=-sqrt(omega2)*x0/(6d0*pi)
+  object_x_displace=object_x_displace-x0dot*dt
+  print *,"Updated semi-major axis and rate: ",time,object_x_displace,x0dot
+
+
+!$OMP PARALLEL DEFAULT(PRIVATE) SHARED(omega2,grid,phi,ngrid,dx,abin,object_mass,object_x_displace)
+  mbox=object_mass
 !$OMP DO SCHEDULE(STATIC)
   do igrid=1,ngrid
-    x=grid(igrid)%x-abin*dx
+    x=grid(igrid)%x-object_x_displace
     y=grid(igrid)%y
     z=grid(igrid)%z
-!
-!
-#ifdef CYLINDER /* This is for a very special test. Modify as needed. */
-    r=sqrt(x*x+y*y)
-#else
     r=sqrt(x*x+y*y+z*z)
-#endif
-!
-!
-    plan=-mbox/r
-    phi(igrid)=plan
+    pert=-mbox/r-half*omega2*(x*x+y*y)
+    phi(igrid)=phi(igrid)+pert
   enddo
 !$OMP END DO
 !$OMP END PARALLEL

@@ -15,7 +15,7 @@ module mcrtfld
  integer::RANLENGTH=50000
 
  integer::currentidx,ran60_id
- integer::iter_cool,maxiter=100
+ integer::iter_cool,maxiter=1000
 !
 !
 #ifdef FLDONLY
@@ -30,9 +30,9 @@ module mcrtfld
  real(pre)::opac_scale=1d0,taum=1d-1
  real(pre),dimension(:),allocatable::divflux,ran_colat,ran_azimuth,ran_pm45
  real(pre)::scale_kappa,sigmaSBcode,coolrate,cooltime,totraden,tcoolold,eold,total_cool
- real(pre)::rho_divflux_limit=1d-8,rho_timestep=1d-8,tau_stream_limit=1d-100
- real(pre)::lumlimit=1d-25
- real(pre)::r_follow_limit=1d0,r_follow_limit2
+ real(pre)::rho_divflux_limit=1d-7,rho_timestep=1d-7,tau_stream_limit=1d-100
+ real(pre)::lumlimit=-1d0
+ real(pre)::r_follow_limit=1d1,r_follow_limit2
  real(pre)::maxT,ds=zero
  logical:: central_print,print_iter=.true.
  
@@ -188,7 +188,7 @@ module mcrtfld
   real(pre),intent(in)::rho,T,ds,kappa
   real(pre)::exptau_loc
   exptau_loc=exp(-rho*kappa*ds)
-  get_luminosity_2=four*sigmaSBcode*T**4*(one-exptau_loc) &
+  get_luminosity_2=four*sigmaSBcode*(T**4-tk_bgrnd**4)*(one-exptau_loc) &
       / (dble(nphottot)*ds)
  end function
 !
@@ -216,6 +216,8 @@ module mcrtfld
   enddo
   currentidx=1
   r_follow_limit2=r_follow_limit**2
+  if (lumlimit<zero)lumlimit=four*sigmaSBcode*Tk_bgrnd**4/(dble(nphottot)*(dx+dy+dz)/three)
+  print *,"Luminosity limiter is set to ",lumlimit
 
  end subroutine
 !
@@ -646,15 +648,15 @@ module mcrtfld
    eps=max(eold+divflux(igrid)*tcool,small_eps)
 !
 !
-#ifdef FLDONLY
-   if((eps-eold)/eold>cfrac)then
-       divflux(igrid)=eold*cfrac/tcool
-       eps=eold*(one+cfrac)
-   elseif( -(eps-eold)/eold>cfrac) then
-       divflux(igrid)=-eold*cfrac/tcool
-       eps=eold*(one-cfrac)
-   endif
-#endif /* end ifdef FLDONLY */
+!#ifdef FLDONLY
+!   if((eps-eold)/eold>cfrac)then
+!       divflux(igrid)=eold*cfrac/tcool
+!       eps=eold*(one+cfrac)
+!   elseif( -(eps-eold)/eold>cfrac) then
+!       divflux(igrid)=-eold*cfrac/tcool
+!       eps=eold*(one-cfrac)
+!   endif
+!#endif /* end ifdef FLDONLY */
 !
 !
    totraden=totraden+divflux(igrid)*vol

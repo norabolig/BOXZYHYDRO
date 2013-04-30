@@ -470,11 +470,13 @@ module eos
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
    subroutine get_gamma(eps,rho,tk,m,gam)
-    real(pre)::eng,tk,gam,eps,rho,m
-    integer::ientry,jump,flag,inext,irho
+    real(pre)::eng,tk,gam,eps,rho,m,slope,mp,gamp,tkp
+    integer::ientry,jump,flag,inext,irho,irhop
     
     irho=min(int( (log10(rho*scl%density)-log_rho_eos_low)/drho_eos) + 1 ,NEOS_RHO)
     if(irho<1)irho=1
+    irhop=irho+1
+    if(irhop>NEOS_RHO)irhop=irho
  
     eng=eps/rho
     ientry=1
@@ -518,6 +520,21 @@ module eos
      /(eng_table(ientry+1,irho)-eng_table(ientry,irho))*(eng-eng_table(ientry,irho))
    m=muc_table(ientry,irho)+(muc_table(ientry+1,irho)-muc_table(ientry,irho)) &
      /(eng_table(ientry+1,irho)-eng_table(ientry,irho))*(eng-eng_table(ientry,irho))
+
+   if(.not.(rho_table(irho)==rho_table(irhop)))then
+      gamp=gamma_table(ientry,irhop)+(gamma_table(ientry+1,irhop)-gamma_table(ientry,irhop))&
+            /(eng_table(ientry+1,irhop)-eng_table(ientry,irhop))*(eng-eng_table(ientry,irhop))
+      mp=muc_table(ientry,irhop)+(muc_table(ientry+1,irhop)-muc_table(ientry,irhop))&
+            /(eng_table(ientry+1,irhop)-eng_table(ientry,irhop))*(eng-eng_table(ientry,irhop))
+      tkp=tk_table(ientry)+(tk_table(ientry+1)-tk_table(ientry))&
+            /(eng_table(ientry+1,irhop)-eng_table(ientry,irhop))*(eng-eng_table(ientry,irhop))
+
+      slope=one/(rho_table(irhop)-rho_table(irho))*(rho-rho_table(irho))
+      gam=gam+(gamp-gam)*slope
+      m=m+(mp-m)*slope
+      tk=tk+(tkp-tk)*slope
+   endif
+
    end subroutine
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -525,11 +542,13 @@ module eos
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
    subroutine get_gamma2(eps,rho,tk,m,gam)
-    real(pre)::eng,tk,gam,eps,rho,m
-    integer::ientry,irho
+    real(pre)::eng,tk,gam,eps,rho,m,mp,tkp,gamp,slope
+    integer::ientry,irho,irhop
  
     irho=min(int( (log10(rho*scl%density)-log_rho_eos_low)/drho_eos) + 1 ,NEOS_RHO)
     if(irho<1)irho=1
+    irhop=irho+1
+    if(irhop>NEOS_RHO)irhop=irho
 
     eng=eps/rho
     !print *, rho,eng,eps,irho
@@ -553,6 +572,21 @@ module eos
     tk=tk_table2(ientry,irho)+(tk_table2(ientry+1,irho)-tk_table2(ientry,irho))&
             /(eng_table2(ientry+1,irho)-eng_table2(ientry,irho))*(eng-eng_table2(ientry,irho))
 
+    if(.not.(rho_table(irho)==rho_table(irhop)))then
+      gamp=gamma_table2(ientry,irhop)+(gamma_table2(ientry+1,irhop)-gamma_table2(ientry,irhop))&
+            /(eng_table2(ientry+1,irhop)-eng_table2(ientry,irhop))*(eng-eng_table2(ientry,irhop))
+      mp=muc_table2(ientry,irhop)+(muc_table2(ientry+1,irhop)-muc_table2(ientry,irhop))&
+            /(eng_table2(ientry+1,irhop)-eng_table2(ientry,irhop))*(eng-eng_table2(ientry,irhop))
+      tkp=tk_table2(ientry,irhop)+(tk_table2(ientry+1,irhop)-tk_table2(ientry,irhop))&
+            /(eng_table2(ientry+1,irhop)-eng_table2(ientry,irhop))*(eng-eng_table2(ientry,irhop))
+
+      slope=one/(rho_table(irhop)-rho_table(irho))*(rho-rho_table(irho))
+      gam=gam+(gamp-gam)*slope
+      m=m+(mp-m)*slope
+      tk=tk+(tkp-tk)*slope
+    endif
+
+
    end subroutine
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -560,19 +594,31 @@ module eos
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
    subroutine get_gamma_from_tk(eps,rho,tk,m,gam)
-    real(pre)::tk,gam,eps,rho,m
-    integer::ientry,irho
+    real(pre)::tk,gam,eps,rho,m,slope,mp,epsp,gamp
+    integer::ientry,irho,irhop
   
     irho=min(int( (log10(rho*scl%density)-log_rho_eos_low)/drho_eos) + 1 ,NEOS_RHO)
     if(irho<1)irho=1
+    irhop=irho+1
+    if(irhop>NEOS_RHO)irhop=irho
    
     ientry=int( (tk-tk_bgrnd)/dTk_eos)+1
     if (ientry>NEOS-1)ientry=NEOS-1
     if(ientry<1)ientry=1
-
+ 
     eps=rho*(eng_table(ientry,irho)+(eng_table(ientry+1,irho)-eng_table(ientry,irho))/dTK_eos*(tk-tk_table(ientry)))
     gam=(gamma_table(ientry,irho)+(gamma_table(ientry+1,irho)-gamma_table(ientry,irho))/dTK_eos*(tk-tk_table(ientry)))
     m=(muc_table(ientry,irho)+(muc_table(ientry+1,irho)-muc_table(ientry,irho))/dTK_eos*(tk-tk_table(ientry)))
+    if(.not.(rho_table(irho)==rho_table(irhop)))then
+       epsp=rho*(eng_table(ientry,irhop)+(eng_table(ientry+1,irhop)-eng_table(ientry,irhop))/dTK_eos*(tk-tk_table(ientry)))
+       gamp=(gamma_table(ientry,irhop)+(gamma_table(ientry+1,irhop)-gamma_table(ientry,irhop))/dTK_eos*(tk-tk_table(ientry)))
+       mp=(muc_table(ientry,irhop)+(muc_table(ientry+1,irhop)-muc_table(ientry,irhop))/dTK_eos*(tk-tk_table(ientry)))
+ 
+       slope=one/(rho_table(irhop)-rho_table(irho))*(rho-rho_table(irho))
+       gam=gam+(gamp-gam)*slope
+       m=m+(mp-m)*slope
+       eps=eps+(epsp-eps)*slope
+    endif
 
    end subroutine
 !

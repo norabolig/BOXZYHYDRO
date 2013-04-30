@@ -42,12 +42,12 @@ module pdrag
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
  subroutine get_drag(dfx,dfy,dfz,tg,pg,dg,x,y,z,vx,vy,vz,d, &
-                           rhoa,asize,ig,w,t,fx,fy,fz,alpha)
+                           rhoa,asize,ig,w,t,fx,fy,fz,alpha,de)
   integer,intent(in)::ig(8)
   real(pre),intent(in)::t,rhoa,asize,vx,vy,vz,x,y,z,d,w(8),fx,fy,fz
-  real(pre),intent(out)::tg,pg,dg
+  real(pre),intent(out)::tg,pg,dg,de
   real(pre)::azimuth,dumeps,dumm,momx,momy,momz,vxn,vyn,vzn,weight
-  real(pre)::vgx,vgy,vgz,delvx,delvy,delvz,cs,kn,dfx,dfy,dfz,vdrift
+  real(pre)::vgx,vgy,vgz,delvx,delvy,delvz,cs,kn,dfx,dfy,dfz,vdrift,e0,e1
   real(pre)::delvx_new,delvy_new,delvz_new,ggam,alpha,exp_talpha,ts,tdrag
   type(units)::scl
 
@@ -74,10 +74,11 @@ module pdrag
   vgx=vgx/dg
   vgy=vgy/dg
   vgz=vgz/dg
-  tg =pg/(scl%rgas*dg)*tg
+  tg=pg/(scl%rgas*dg)*tg
   delvx=vgx-vx
   delvy=vgy-vy
   delvz=vgz-vz
+  e0=half*( (vgx**2+vgy**2+vgz**2)*dg + (vx**2+vy**2+vz**2)*d )
   call get_gamma_from_tk(dumeps,dg,tg,dumm,ggam)
   cs=sqrt(ggam*pg/dg)
   kn=half*dumm*mp/scl%mass/(dg*pi*4.43d-43*asize) !4.44d-43->1d-16cm^2
@@ -127,9 +128,16 @@ module pdrag
   vyn=(momy+delvy_new*d)/(d+dg)-delvy_new
   vzn=(momz+delvz_new*d)/(d+dg)-delvz_new
 
+
+  e1=half*( ((vxn+delvx_new)**2+(vyn+delvy_new)**2+(vzn+delvz_new)**2)*dg &
+    + ((vxn)**2+(vyn)**2+(vzn)**2)*d )
+
   dfx=(vxn-vx)/t
   dfy=(vyn-vy)/t
   dfz=(vzn-vz)/t
+
+  de=(e0-e1)/(d+dg) ! assuming the dust takes all of the missing energy
+!  de=vxn+delvx_new-vgx
 
  end subroutine
 !

@@ -1,4 +1,4 @@
- FC=gfortran -O3 -fopenmp 
+ FC=gfortran -O3 
 # POSSIBLE FLAGS
 # -DRADTRAN 
 # -DTHERMALHIST 
@@ -10,10 +10,11 @@
 # -DFASTGRAVITY 
 # -DEXTRAANCHORS 
 # -DSUPPRESSDRIFT  
-# -DTCDIFFERENCE 
-# -DUPWIND 
-# -DEXPANSION_LIMITED
- FLAGS=-frecord-marker=4 -DVERBOSE -DTCDIFFERENCE -x f95-cpp-input  -Wall  #-ffpe-trap=zero,overflow,invalid
+# -DROTATE
+# -DEXTERNALPHI
+# -DRUN_TEST_PHI
+# -DPOLYEOS
+ FLAGS=-frecord-marker=4 -DVERBOSE -x f95-cpp-input  -Wall  #-ffpe-trap=zero,overflow,invalid
 
  OBJ = parameters.o derived_types.o \
        grid_commons.o eos.o input.o \

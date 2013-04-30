@@ -29,15 +29,18 @@ module parameters
  real(pre)::dz=0.25d0
  real(pre)::yoffset=0.d0
  logical::fluxangmom=.false.
- logical::no_out_flow_x=.true.
- logical::no_out_flow_y=.true.
- logical::no_out_flow_z=.true.
+ logical::no_outflow_xl=.true.
+ logical::no_outflow_xr=.true.
+ logical::no_outflow_yl=.true.
+ logical::no_outflow_yr=.true.
+ logical::no_outflow_zl=.true.
+ logical::no_outflow_zr=.true.
 !
 !***
 !eos parameters
 !***
 !
- real(pre)::mu_z=28.75d0
+ real(pre)::mu_z=16.78d0
  real(pre)::brot=85.4d0
  real(pre)::vib=5987d0
  real(pre)::diss=52000d0
@@ -66,16 +69,25 @@ module parameters
  real(pre)::vlimit=1d1
  real(pre)::starttime=0d0
  real(pre)::endtime=0d0
- real(pre)::dtout=20d0
- real(pre)::cfl=0.25d0
+ real(pre)::dtout=10d0
+ real(pre)::cfl=0.5d0
 !
  real(pre)::den_change_tol=0.1d0
  real(pre)::avmagx=0.0d0,avmagy=0.d0,avmagz=0.00d0
 !
  real(pre)::anchorradius=100d0
- real(pre)::tkflow=288d0
- real(pre)::rhoflow=1.2d-3
- real(pre)::vflow=4117d0
+ real(pre)::tkflow=300d0
+ real(pre)::rhoflow=1d-9
+ real(pre)::vflow=9e5
+ real(pre)::object_radius=3.1
+ real(pre)::object_x_displace=-15d0
+ real(pre)::object_mass=1d0
+ real(pre)::x0dot=0d0
+ real(pre)::pmass_factor=3.375d-5
+ real(pre)::psize1=0.1d0
+ real(pre)::psize2=0.1d0
+ real(pre)::turbulence=0.01d0
+
 
  character(32)::flux_limit_type='minmod'
 #define MINMOD
@@ -101,10 +113,10 @@ module parameters
 !particles
 !***
 !
- integer::npart=1000
+ integer::npart=100000
  integer::npart_direct=0
- real(pre)::tg_immediate_couple=1d4
- real(pre)::a_sublimate_limit=6.67e-13
+ real(pre)::tg_immediate_couple=1450d0
+ real(pre)::a_sublimate_limit=6.67e-20
  logical::use_pic=.true.
  logical::initialize_particles_now=.true.
 !

@@ -8,29 +8,24 @@ subroutine courant
  implicit none
 
  integer::igrid
- real(pre)::sound2,s1,s2,s3,s4
- real(pre)::r1,r2,r0
+ real(pre)::r0,sound
 
 !$OMP MASTER
  dtrate=zero
 !$OMP END MASTER
 !$OMP BARRIER
 !$OMP DO SCHEDULE(STATIC) REDUCTION(max:dtrate)  &
-!$OMP PRIVATE(s1,s2,s3,s4,r1,r2,r0,sound2)
+!$OMP PRIVATE(r0,sound)
  do igrid=1,ngrid
-  sound2=(adindx(igrid)*p(igrid)/cons(1,igrid))/(dx*dx+dy*dy+dz*dz)
-  s1=(u(1,igrid)/dx)**2
-  s2=(u(2,igrid)/dy)**2
-  s3=(u(3,igrid)/dz)**2
-  s4=16d0*((qq(1,igrid)/dx)**2+(qq(2,igrid)/dy)**2+(qq(3,igrid)/dz)**2)
-  r0=sqrt(s1+s2+s3+s4+sound2)
-  dtrate=max(dtrate,r0)
+   sound=sqrt(adindx(igrid)*p(igrid)/cons(1,igrid))
+   r0=(sound+abs(u(1,igrid)))/dx+(sound+abs(u(2,igrid)))/dy+(sound+abs(u(3,igrid)))/dz
+   dtrate=max(dtrate,r0)
  enddo
 !$OMP ENDDO 
 !$OMP BARRIER
 
 !$OMP MASTER
- dtrate=max(dtrate,rate_expand)
+! dtrate=max(dtrate,rate_expand)
  dt=cfl/dtrate!*min(f1*f2,one)
 !
 !

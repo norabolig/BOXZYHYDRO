@@ -10,7 +10,7 @@ subroutine source
 !
 !
 #ifdef PARTICLE
- use particle, only : kick_particles, add_direct_togrid ! particle.f90
+ use particle, only : kick_particles,add_direct_togrid ! particle.f90
 #endif
 !
 !
@@ -29,13 +29,12 @@ subroutine source
 !
 !
   real(pre)::mbin,mbox,x0,omega2,omega
-      print *, "YOU MUST DEFINE THE CONDITIONS FOR THE ROTATING FRAME"
-      print *, "THIS CAN BE DONE IN SOURCE"
-      stop
-      mbin=one
-      mbox=0d0
-      x0=0d0
-      omega2=(mbin+mbox)/abs(x0)**3
+      !print *, "YOU MUST DEFINE THE CONDITIONS FOR THE ROTATING FRAME"
+      !print *, "THIS CAN BE DONE IN SOURCE"
+      !stop
+      mbin=object_mass
+      x0=object_x_displace
+      omega2=(mbin)/abs(x0)**3
       omega=sqrt(omega2)
 !
 !
@@ -68,28 +67,28 @@ subroutine source
 !Y direction
 !***
 !
-    cons(3,igrid)=cons(3,igrid)+pforce(2,igrid)*dt*cons(1,igrid)
     if(fluxangmom)then
       cons(3,igrid)=cons(3,igrid)+cons(1,igrid)*(x*u(2,igrid)-y*u(1,igrid))**2*y/r**4*dt
     endif
 !
 !
 #ifdef ROTATE
-      cons(3,igrid)=cons(3,igrid)+cons(1,igrid)*(-u(1,igrid)*omega)*dt*two
+      cons(3,igrid)=cons(3,igrid)+cons(1,igrid)*(-u(1,igrid)*omega)*dt*two &
+                   +cons(1,igrid)*(1.5d0*omega*x/x0*x0dot)*dt
 #endif
 !
 !***
 ! X DIRECTION
 !***
 !
-    cons(2,igrid)=cons(2,igrid)+pforce(1,igrid)*dt*cons(1,igrid)
     if(fluxangmom)then
       cons(2,igrid)=cons(2,igrid)+cons(1,igrid)*(x*u(2,igrid)-y*u(1,igrid))**2*x/r**4*dt
     endif
 !
 !
 #ifdef ROTATE
-      cons(2,igrid)=cons(2,igrid)+cons(1,igrid)*(u(2,igrid)*omega)*dt*two
+      cons(2,igrid)=cons(2,igrid)+cons(1,igrid)*(u(2,igrid)*omega)*dt*two&
+                   +cons(1,igrid)*(-1.5d0*omega*y/x0*x0dot)*dt
 #endif
 !
 !
@@ -97,7 +96,7 @@ subroutine source
 ! Z DIRECTION
 !***
 !
-    cons(4,igrid)=cons(4,igrid)+pforce(3,igrid)*dt*cons(1,igrid)
+! DO NOTHING
 
  enddo
 !$OMP ENDDO

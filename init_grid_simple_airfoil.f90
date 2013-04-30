@@ -1,8 +1,5 @@
 !
-! Initialize the grid.  Most of this will not need to be modified.
-! The only section that needs to be touched is if an anchor-cell 
-! distribution is desired.  That will eventually go into a 
-! a separate file.
+! Initialize grid file with anchor cells that form a simple airfoil.
 !
 subroutine init_grid
  use parameters
@@ -11,30 +8,29 @@ subroutine init_grid
  
  integer:: igrid,iz,ibound,ix,iy,ibound2
  integer::flag1ix,flag1iy,flag1iz,flag2ix,flag2iy,flag2iz
- integer::flag1,flag2,flag,ineigh
+ integer::flag1,flag2,flag
  real(pre)::x,y,z,r,mslope,ael,bel,length,x0,aoa,xp,yp
- real(pre)::caf,paf,taf,maf,xc,xx,yt,yc,yu,yl,xu,xl,theta,dycdx,pc
 
  ngrid=nx*ny*nz
  print *,"# Total grid elements = ",ngrid
 
  allocate(grid(ngrid))
+ allocate(phi(ngrid))
  allocate(p  (ngrid))
  allocate(adindx  (ngrid))
  allocate(muc_array  (ngrid))
  allocate(cons(5,ngrid))
  allocate(cons_old(5,ngrid))
- allocate(fluxtmp(5,ngrid))
+ allocate(cons_new(5,ngrid))
  allocate(u  (3,ngrid))
  allocate(qq (3,ngrid))
  allocate(gforce (3,ngrid))
  allocate(pforce (3,ngrid))
  allocate(rhotot(ngrid))
- allocate(phi(ngrid))
- allocate(phi_new(ngrid))
 
+ nullify(cons_pt)
 
- call first_touch() ! below
+ call first_touch()
 
  max_den_change_old=one
  max_den_old=zero
@@ -88,25 +84,36 @@ subroutine init_grid
  allocate(indx_ghost(nghost))
  print *, "Allocated ",nghost," ghost cells"
 
-!
-!***
-! The following is for setting anchors and obstructions on the grid.
-! The example below is for a sphere.
-!***
-!
-!
+! create a huge sphere
 #ifdef EXTRAANCHORS 
-  paf=object_radius
-
+ ael=40d0*dx
+ bel=15d0*dx
+ x0=-25.7*dx
+ length=110d0*dx
+ mslope=0.314422
+ nanchor=0
+ aoa=-0.*pi/180.
  do igrid=1,ngrid
-   x=grid(igrid)%x
-   y=grid(igrid)%y
+   xp=grid(igrid)%x-75*dx
+   yp=grid(igrid)%y
    z=grid(igrid)%z
 
-   flag=0
-   if ( x*x+y*y+z*z>paf**2)flag=1
+   x=xp*cos(aoa)+yp*sin(aoa)
+   y=xp*sin(aoa)+yp*cos(aoa) 
 
-    if (flag==1.and.grid(igrid)%boundary==0)then
+    r=sqrt(x*x+y*y)
+    flag=0
+    r=(x/ael)**2+(y/bel)**2
+    if (r<=one)then
+      flag=1
+    else
+      if (x>=-(length-x0).and.x<=zero) then
+        if(y>=-bel)then
+          if(y<=(-bel+mslope*(x+length)).and.y<(-bel+mslope*(x0+length)))flag=1
+        endif
+      endif
+    endif
+    if (flag==1)then
       nanchor=nanchor+1
       grid(igrid)%boundary=3
     endif    
@@ -121,11 +128,10 @@ subroutine init_grid
         indx_anchor(ibound)=igrid
     endif
  enddo
-!
-! 
-#endif /* end ifdef EXTRAANCHORS */
-!
-!
+ 
+#endif
+
+
  ibound=0
  ibound2=0
  do igrid=1,ngrid
@@ -162,26 +168,26 @@ subroutine init_grid
      ix=grid(igrid)%ix
      iy=grid(igrid)%iy
      iz=grid(igrid)%iz
-     ineigh=0
-     grid(igrid)%ineigh(:)=ineigh
+     grid(igrid)%ineigh(:)=0
 
-     if(ix==2)then 
-       ineigh=grid(igrid)%id+1
+     if(ix==2)then ! always store the boundary donor in neighbor 1
+        grid(igrid)%ineigh(1)=grid(igrid)%id+1
      elseif(ix==nx-1)then
-       ineigh=grid(igrid)%id-1
+        grid(igrid)%ineigh(1)=grid(igrid)%id-1
      elseif(iy==2)then
-       ineigh=grid(igrid)%id+nx
+       grid(igrid)%ineigh(1)=grid(igrid)%id+nx
      elseif(iy==ny-1)then
-       ineigh=grid(igrid)%id-nx
+       grid(igrid)%ineigh(1)=grid(igrid)%id-nx
      elseif(iz==2)then
-       ineigh=grid(igrid)%id+nx*ny
+       grid(igrid)%ineigh(1)=grid(igrid)%id+nx*ny
      elseif(iz==nz-1)then
-       ineigh=grid(igrid)%id-nx*ny
+       grid(igrid)%ineigh(1)=grid(igrid)%id-nx*ny
+     else
+       print *," Error. Grid boundary is not really a boundary."
+       stop"Forced stop in init_grid"
      endif
 
-     grid(igrid)%ineigh(1)=ineigh
-
-
+ 
    else
 
     grid(igrid)%ineigh(1)=grid(igrid)%id+nx
@@ -191,16 +197,13 @@ subroutine init_grid
     grid(igrid)%ineigh(5)=grid(igrid)%id+nx*ny
     grid(igrid)%ineigh(6)=grid(igrid)%id-nx*ny
    endif
+   !if(grid(igrid)%boundary>0)print *, "BOUNDARY NEIGHBOR",igrid,ix,grid(igrid)%ineigh(1)
  
  enddo
+ 
+
  end subroutine
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! First touch principle.  This is for accelerating OpenMP by smartly
-! allocating memory. As the name implies, the trick is to touch the
-! arrays as soon as possible.
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
+
  subroutine first_touch()
   use parameters
   use grid_commons
@@ -224,6 +227,7 @@ subroutine init_grid
    adindx(igrid)=zero
    muc_array(igrid)=zero
    cons(:,igrid)=zero
+   cons_new(:,igrid)=zero
    cons_old(:,igrid)=zero
    u(:,igrid)=zero
    qq(:,igrid)=zero
