@@ -382,6 +382,31 @@ end function
            call set_ghost_helper(idx,ip,fac)
          endif
        endif
+       if(iy==1.or.iy==2.and.(grid(idx)%x>(-two+one/three)) )then
+         fac(1:3)=one
+         fac(2)=-one 
+         if(iy==1)then
+           ip=nx*ny*(iz-1)+nx*((iy+3)-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         elseif(iy==2)then
+           ip=nx*ny*(iz-1)+nx*((iy+1)-1)+ix
+           call set_ghost_helper(idx,ip,fac)
+         endif
+       endif
+ 
+       if(iy==ny.or.iy==ny-1.or.ix==1.or.ix==2)then
+          if (grid(idx)%x<-two+one/three+(one+20d0*time)*(1./3.)**0.5)then
+             cons(1,idx)=eight
+             p(idx)=116.5d0
+             u(1,idx)=8.25*cos(pi/six)
+             u(2,idx)=-8.25*sin(pi/six)
+             cons(2,idx)=cons(1,idx)*u(1,idx)
+             cons(3,idx)=cons(1,idx)*u(2,idx)
+             cons(4,idx)=cons(1,idx)*u(3,idx)
+             cons(5,idx)=p(idx)/(adindx(idx)-one)&
+               +0.5d0*(cons(2,idx)**2+cons(3,idx)**2)/cons(1,idx)
+           endif
+       endif
   enddo
 !$OMP ENDDO
 !$OMP BARRIER

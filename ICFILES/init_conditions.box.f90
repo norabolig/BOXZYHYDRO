@@ -1,0 +1,73 @@
+!
+! Set up initial conditions for the simulations.
+! This setup is for a shock tube.  Modify as needed.
+!
+subroutine init_conditions()
+ use parameters
+ use derived_types
+ use grid_commons
+ implicit none
+
+ integer:: igrid
+ 
+ type(units)::scale
+
+ real(pre)::x,y,z,r
+ integer::flag=0
+ 
+ call get_units(scale)
+!
+!***
+! set your initial conditions here
+! these initial conditions are for a sod shock tube test
+! directions x, y, and z can be chosen below where indicated 
+!***
+!
+!$OMP DO SCHEDULE(STATIC) PRIVATE(x,y,z)
+ do igrid=1,ngrid
+  x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
+  phi(igrid)=zero
+  
+   cons(1,igrid)=small_rho
+   flag=0
+   if(x<-40d0 .and. x>-160d0 )then
+     if(y>-160d0.and. y<-40d0)flag=flag+1
+   endif
+   if(x>-150d0.and. x<-50d0)then
+     if(y<-50d0 .and. y>-150d0 )flag=flag-1
+   endif
+   if(flag>0)cons(1,igrid)=one
+   p(igrid)=zero
+   adindx(igrid)=gammafix
+   u(1,igrid)=one
+   u(2,igrid)=one
+   u(3,igrid)=zero
+   cons(2,igrid)=cons(1,igrid)*u(1,igrid)
+   cons(3,igrid)=cons(1,igrid)*u(2,igrid)
+   cons(4,igrid)=cons(1,igrid)*u(3,igrid)
+   cons(5,igrid)=p(igrid)/(adindx(igrid)-one)&
+       +0.5d0*(cons(2,igrid)**2+cons(3,igrid)**2)/cons(1,igrid)
+
+ enddo
+!$OMP ENDDO
+!$OMP DO SCHEDULE(STATIC)
+ do igrid=1,nbound
+  cons(1,indx_bound(igrid))=small_rho
+  cons(2,indx_bound(igrid))=zero 
+  cons(3,indx_bound(igrid))=zero 
+  cons(4,indx_bound(igrid))=zero 
+  cons(5,indx_bound(igrid))=small_eps
+ enddo
+!$OMP ENDDO
+!$OMP DO SCHEDULE(STATIC)
+do igrid=1,ngrid
+ cons_old(1,igrid)=cons(1,igrid)
+ cons_old(2,igrid)=cons(2,igrid)
+ cons_old(3,igrid)=cons(3,igrid)
+ cons_old(4,igrid)=cons(4,igrid)
+ cons_old(5,igrid)=cons(5,igrid)
+enddo
+!$OMP ENDDO
+ print *, "Done with ICs"
+
+end subroutine 

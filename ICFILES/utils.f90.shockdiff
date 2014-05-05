@@ -16,16 +16,6 @@ module utils
 
  contains
 !
-!
-real(pre) function set_inverse(xx)
-  real(pre)::xx
-  if(xx/=zero)then
-    set_inverse=one/xx
-  else
-    set_inverse=zero
-  endif
-end function
-!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Find the grid index for a given x,y,z
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -382,6 +372,13 @@ end function
            call set_ghost_helper(idx,ip,fac)
          endif
        endif
+       if(iy>ny/2.and.(ix==1.or.ix==2))then
+         cons(1,idx)=5.0293806477913563d0
+         p(idx)=21.471035714285712d0
+         u(1,idx)=4.0779469548133598d0
+         cons(2,idx)=u(1,idx)*cons(1,idx) 
+         cons(5,idx)=p(idx)/(adindx(idx)-1.0)+0.5*cons(2,idx)**2/cons(1,idx)
+       endif
   enddo
 !$OMP ENDDO
 !$OMP BARRIER
@@ -596,22 +593,16 @@ end function
  end function
 
  subroutine left_right_states(cm1,c0,c1,c2,c_l,c_r)
-    real(pre)::cm1,c0,c1,c2,c_l,c_r,tt=SLOPE_THETA,ufaceLL,ufaceRR
+    real(pre)::cm1,c0,c1,c2,c_l,c_r,tt=1.0d0,ufaceLL,ufaceRR
+    !ufaceLL=half*(c0+cm1)
+    !ufaceRR=half*(c2+c1)
+    !c_l=c0+half*genminmod(tt*(c0-ufaceLL),half*(c1-ufaceLL),tt*(c1-c0))
+    !c_r=c1-half*genminmod(tt*(c1-c0),half*(ufaceRR-c0),tt*(ufaceRR-c1))
+    !c_l=c0+half*vanleer((c0-ufaceLL),(c1-c0))
+    !c_r=c1-half*vanleer((c1-c0),(ufaceRR-c1))
     c_l=c0+half*genminmod(tt*(c0-cm1),half*(c1-cm1),tt*(c1-c0))
     c_r=c1-half*genminmod(tt*(c1-c0),half*(c2-c0),tt*(c2-c1))
  end subroutine
-
- subroutine left_right_states_v(cm1,c0,c1,c2,ccL,ccR,c_l,c_r)
-    real(pre)::cm1,c0,c1,c2,c_l,c_r,tt=SLOPE_THETA,ccL,ccR
-    c_l=c0+half*(one-ccL)*genminmod(tt*(c0-cm1),half*(c1-cm1),tt*(c1-c0))
-    c_r=c1-half*(one+ccR)*genminmod(tt*(c1-c0),half*(c2-c0),tt*(c2-c1))
- end subroutine
-
- real(pre) function slope(c0,c1,c2)
-    real(pre)::c0,c1,c2,tt=SLOPE_THETA
-    slope=genminmod(tt*(c1-c0),half*(c2-c0),tt*(c2-c1))
- end function slope
-
 
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

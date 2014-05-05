@@ -12,8 +12,8 @@ subroutine flux(avg)
 
 
  integer :: igrid,b(6),idim,isten(5),avg,flag
- real(pre)::fxl(5),fxr(5),fyt(5),fyb(5),fzt(5),fzb(5),areaxy,areayz,areaxz
- real(pre)::vol,left,right
+ real(pre)::fx(2,5),fy(2,5),fz(2,5),areaxy,areayz,areaxz
+ real(pre)::vol,left
  real(pre)::x,y,z,r,angmom,rmom
 
  type(units)::scale
@@ -21,9 +21,9 @@ subroutine flux(avg)
  call get_units(scale)
 
 !$OMP PARALLEL DEFAULT(SHARED) &
-!$OMP&PRIVATE(areaxy,areayz,areaxz) &
-!$OMP&private(fzt,fzb,fxr,fxl,fyt,fyb,left,right) &
-!$OMP&private(b,angmom,rmom,x,y,z,r,isten,flag)
+!$OMP&PRIVATE(areaxy,areayz,areaxz,vol) &
+!$OMP&private(fz,fx,fy,left,right,flag) &
+!$OMP&private(b,angmom,rmom,x,y,z,r,isten,flag,corrL,corrR)
 
  areaxy=dy*dx
  areayz=dy*dz
@@ -58,10 +58,85 @@ subroutine flux(avg)
 ! Enter main loop
 !***
 !
+! First get slopes
+!
 !$OMP DO SCHEDULE(static)
  do igrid=1,ngrid
 
+  call clear_slope(igrid)
   fluxtmp(:,igrid)=zero
+
+  if(grid(igrid)%boundary>0)then
+      b(:)=igrid
+  else
+      call get_boundary_wb(igrid,b)
+  endif
+
+  isten(1)  = b(4)
+  isten(2)  = igrid
+  isten(3)  = b(3)
+  isten(5)  = 1
+
+  call calculate_slopes(isten) ! only indices 1:3 matter here
+
+  isten(1)  = b(2)
+  isten(2)  = igrid
+  isten(3)  = b(1)
+  isten(5)  = 2
+
+  call calculate_slopes(isten) ! only indices 1:3 matter here
+
+  isten(1)  = b(6)
+  isten(2)  = igrid
+  isten(3)  = b(5)
+  isten(5)  = 3
+
+  call calculate_slopes(isten) ! only indices 1:3 matter here
+
+ enddo
+!$OMP ENDDO 
+!$OMP BARRIER
+!
+!
+! next construct left and right states
+!
+!$OMP DO SCHEDULE(static)
+ do igrid=1,ngrid
+
+  if(grid(igrid)%boundary>0)then
+      b(:)=igrid
+  else
+      call get_boundary_wb(igrid,b)
+  endif
+
+
+  isten(1)  = b(4)
+  isten(2)  = igrid
+  isten(3)  = b(3)
+
+  call calculate_states(isten) ! only indices 1:3 matter here
+
+  isten(1)  = b(2)
+  isten(2)  = igrid
+  isten(3)  = b(1)
+
+  call calculate_states(isten) ! only indices 1:3 matter here
+
+  isten(1)  = b(6)
+  isten(2)  = igrid
+  isten(3)  = b(5)
+
+  call calculate_states(isten) ! only indices 1:3 matter here
+
+ enddo
+!$OMP ENDDO 
+!$OMP BARRIER
+!
+! next calculate fluxes
+!
+!$OMP DO SCHEDULE(static)
+ do igrid=1,ngrid
+
   if(grid(igrid)%boundary>0)cycle
 
   call get_boundary_wb(igrid,b)
@@ -69,79 +144,66 @@ subroutine flux(avg)
   isten(1)  = b(4)
   isten(2)  = igrid
   isten(3)  = b(3)
-  isten(4)  = grid(b(3))%ineigh(3)
   isten(5)  = 1
-  call adjust_for_boundary(isten,3,2,flag)
-  call get_states(isten,fxr)
-  if(flag==1)then
-     fxr=zero
-     fxr(2)=p(igrid)
-  endif
 
-  isten(1)  = grid(b(4))%ineigh(4)
-  isten(2)  = b(4)
-  isten(3)  = igrid
-  isten(4)  = b(3)
-  isten(5)  = 1
-  call adjust_for_boundary(isten,2,3,flag)
-  call get_states(isten,fxl)
+  call get_fluxes(isten,fx) 
+  flag=0
+  call adjust_for_boundary(isten,3,flag)
   if(flag==1)then
-     fxl=zero
-     fxl(2)=p(igrid)
+    fx(2,:)=zero
+    fx(2,2)=p(igrid)
   endif
-
+  flag=0
+  call adjust_for_boundary(isten,1,flag)
+  if(flag==1)then
+    fx(1,:)=zero
+    fx(1,2)=p(igrid)
+  endif
 
   isten(1)  = b(2)
   isten(2)  = igrid
   isten(3)  = b(1)
-  isten(4)  = grid(b(1))%ineigh(1)
   isten(5)  = 2
-  call adjust_for_boundary(isten,3,2,flag)
-  call get_states(isten,fyt)
+
+  call get_fluxes(isten,fy) 
+  flag=0
+  call adjust_for_boundary(isten,3,flag)
   if(flag==1)then
-     fyt=zero
-     fyt(3)=p(igrid)
+    fy(2,:)=zero
+    fy(2,3)=p(igrid)
+  endif
+  flag=0
+  call adjust_for_boundary(isten,1,flag)
+  if(flag==1)then
+    fy(1,:)=zero
+    fy(1,3)=p(igrid)
   endif
 
-  isten(1)  = grid(b(2))%ineigh(2)
-  isten(2)  = b(2)
-  isten(3)  = igrid
-  isten(4)  = b(1)
-  isten(5)  = 2
-  call adjust_for_boundary(isten,2,3,flag)
-  call get_states(isten,fyb)
-  if(flag==1)then
-     fyb=zero
-     fyb(3)=p(igrid)
-  endif
 
   isten(1)  = b(6)
   isten(2)  = igrid
   isten(3)  = b(5)
-  isten(4)  = grid(b(5))%ineigh(5)
   isten(5)  = 3
-  call adjust_for_boundary(isten,3,2,flag)
-  call get_states(isten,fzt)
+
+  call get_fluxes(isten,fz) 
+  flag=0
+  call adjust_for_boundary(isten,3,flag)
   if(flag==1)then
-     fzt=zero
-     fzt(4)=p(igrid)
+    fz(2,:)=zero
+    fz(2,4)=p(igrid)
+  endif
+  flag=0
+  call adjust_for_boundary(isten,1,flag)
+  if(flag==1)then
+    fz(1,:)=zero
+    fz(1,4)=p(igrid)
   endif
 
-  isten(1)  = grid(b(6))%ineigh(6)
-  isten(2)  = b(6)
-  isten(3)  = igrid
-  isten(4)  = b(5)
-  isten(5)  = 3
-  call adjust_for_boundary(isten,2,3,flag)
-  call get_states(isten,fzb)
-  if(flag==1)then
-     fzb=zero
-     fzb(4)=p(igrid)
-  endif
 
   do idim=1,5
-     fluxtmp(idim,igrid)=-( areaxy*(fzt(idim)-fzb(idim))+areayz*(fxr(idim)-fxl(idim))&
-                        +areaxz*(fyt(idim)-fyb(idim)))/(vol)*dt
+     fluxtmp(idim,igrid)=-(areayz*(fx(2,idim)-fx(1,idim))+&
+                           areaxz*(fy(2,idim)-fy(1,idim))+&
+                           areaxy*(fz(2,idim)-fz(1,idim)))*dt/vol
   enddo
  enddo
 !$OMP ENDDO 
@@ -209,84 +271,313 @@ endif
 
 end subroutine
 
-subroutine get_states(idx,fhll)
+subroutine clear_slope(id)
  use parameters
  use grid_commons
- use utils,only : left_right_states
+ implicit none
+!
+ integer, intent(in)::id
+!
+ slope_u(:,:,id)=zero
+ slope_p(:,id)=zero
+ slope_d(:,id)=zero
+ slope_e(:,id)=zero
+ slope_g(:,id)=zero
+end subroutine
+!
+!
+!
+subroutine calculate_slopes(idx)
+ use parameters
+ use grid_commons
+ use utils,only:slope
  implicit none
 
-  integer::idx(5)
-  real(pre)::fluxes_l(5),fluxes_r(5),states_l(5),states_r(5),fhll(5)
+ integer,intent(in):: idx(5)
+ integer:: idim,idir
+
+ idir=idx(5)
+!
+! slopes for velocity
+!
+ do idim=1,3
+   slope_u(idir,idim,idx(2))=slope(u(idim,idx(1)),u(idim,idx(2)),u(idim,idx(3)))
+ enddo
+!
+! slopes for pressure,density,energy,and gamma
+!
+  slope_p(idir,idx(2))=slope(p(idx(1)),p(idx(2)),p(idx(3)))
+  slope_d(idir,idx(2))=slope(cons(1,idx(1)),cons(1,idx(2)),cons(1,idx(3)))
+  slope_e(idir,idx(2))=slope(cons(5,idx(1)),cons(5,idx(2)),cons(5,idx(3)))
+  slope_g(idir,idx(2))=slope(adindx(idx(1)),adindx(idx(2)),adindx(idx(3)))
+ 
+end subroutine
+!
+!
+!
+subroutine interface_muscl(q,lm,lp,s,minus,plus)
+ use parameters
+ real(pre),intent(in)::q,lp,lm,s
+ real(pre)::minus,plus
+!
+ minus=q+half*(-one-lm)*s
+ plus =q+half*( one-lp)*s
+!
+!
+end subroutine
+!
+!
+!
+subroutine calculate_states(isten)
+ use parameters
+ use grid_commons
+ use eos, only :  get_gamma_from_p
+ implicit none
+!
+ integer,intent(in)::isten(5)
+ integer::idim,jdim,idir1,idir2,idx
+!
+ real(pre)::sound,lambda_p,lambda_m,ds(3),transverse
+ real(pre)::lambda_p1, lambda_p2, lambda_m1,lambda_m2,m,ekin,eps
+ real(pre)::cc,rho,uvel,vvel,wvel,drx,dry,drz,dux,dvx,dvz,duy,dvy,dwy,duz,dwz,dwx
+ real(pre)::sr0,su0,sv0,sw0,sp0,dpx,dpy,dpz,dex,dey,dez,dgx,dgy,dgz,se0,sg0
+!
+ idx=isten(2)
+ sound=sqrt(p(idx)*adindx(idx)/cons(1,idx))
+ ds=[dx,dy,dz]
+ do idim=1,3
+  lambda_p=max(u(idim,idx)+sound,zero)*dt/ds(idim)
+  lambda_m=min(u(idim,idx)-sound,zero)*dt/ds(idim)
+  !lambda_p=u(idim,idx)*dt/ds(idim)
+  !lambda_m=u(idim,idx)*dt/ds(idim)
+!
+  do jdim=1,3
+     call interface_muscl(u(jdim,idx),lambda_m,lambda_p,slope_u(idim,jdim,idx),state_u_m(idim,jdim,idx),&
+          state_u_p(idim,jdim,idx))
+!  
+  enddo
+  call interface_muscl(p(idx),lambda_m,lambda_p,slope_p(idim,idx),state_p_m(idim,idx),&
+       state_p_p(idim,idx))
+  call interface_muscl(cons(1,idx),lambda_m,lambda_p,slope_d(idim,idx),state_d_m(idim,idx),&
+      state_d_p(idim,idx))
+  call interface_muscl(cons(5,idx),lambda_m,lambda_p,slope_e(idim,idx),state_e_m(idim,idx),&
+      state_e_p(idim,idx))
+  call interface_muscl(adindx(idx),lambda_m,lambda_p,slope_g(idim,idx),state_g_m(idim,idx),&
+      state_g_p(idim,idx))
+!
+ enddo
+!
+! now add corrections from transverse flux
+!
+
+ rho=cons(1,idx)
+ uvel=u(1,idx)
+ vvel=u(2,idx)
+ wvel=u(3,idx)
+
+ drx=slope_d(1,idx)
+ dux=slope_u(1,1,idx)
+ dvx=slope_u(1,2,idx)
+ dwx=slope_u(1,3,idx)
+ dpx=slope_p(1,idx)
+ dex=slope_e(1,idx)
+ dgx=slope_g(1,idx)
+
+ dry=slope_d(2,idx)
+ duy=slope_u(2,1,idx)
+ dvy=slope_u(2,2,idx)
+ dwy=slope_u(2,3,idx)
+ dpy=slope_p(2,idx)
+ dey=slope_e(2,idx)
+ dgy=slope_g(2,idx)
+
+ drz=slope_d(3,idx)
+ duz=slope_u(3,1,idx)
+ dvz=slope_u(3,2,idx)
+ dwz=slope_u(3,3,idx)
+ dpz=slope_p(3,idx)
+ dez=slope_e(3,idx)
+ dgz=slope_g(3,idx)
+
+ su0=  zero    -vvel*duy -wvel*duz
+ sv0=-uvel*dvx + zero    -wvel*dvz
+ sw0=-uvel*dwx -vvel*dwy + zero 
+
+ sr0=zero
+ sp0=zero
+ se0=zero
+ sg0=zero
+
+ cc=dt*half/dx
+!
+! Tried several variations of source terms.  
+! Standard approach does not seem to be appropriate
+! because not assuming a perfect gas (p=(g-1)eps).
+! Blast waves look good at the moment, so will keep
+! only the velocity cross terms for now until I
+! figure out something better to do.  
+!
+! This can also be done with loops, etc., but I wrote it
+! out so the cross terms become more apparent. 
+!
+! sr0=(    -dvy-dwz)*rho
+! sp0=(    -dvy-dwz)*p(idx)
+! se0=(    -dvy-dwz)*cons(5,idx)
+! sg0=(    -dvy-dwz)*adindx(idx)
+! x dir
+ state_d_p(1,idx)  =state_d_p(1,idx)+sr0*cc
+ state_u_p(1,1,idx)=state_u_p(1,1,idx)+su0*cc
+ state_u_p(1,2,idx)=state_u_p(1,2,idx)+sv0*cc
+ state_u_p(1,3,idx)=state_u_p(1,3,idx)+sw0*cc
+ state_p_p(1,idx)  =state_p_p(1,idx)+sp0*cc
+ state_e_p(1,idx)  =state_e_p(1,idx)+se0*cc
+ state_g_p(1,idx)  =state_g_p(1,idx)+sg0*cc
+!
+ state_d_m(1,idx)  =state_d_m(1,idx)+sr0*cc
+ state_u_m(1,1,idx)=state_u_m(1,1,idx)+su0*cc
+ state_u_m(1,2,idx)=state_u_m(1,2,idx)+sv0*cc
+ state_u_m(1,3,idx)=state_u_m(1,3,idx)+sw0*cc
+ state_p_m(1,idx)  =state_p_m(1,idx)+sp0*cc
+ state_e_m(1,idx)  =state_e_m(1,idx)+se0*cc
+ state_g_m(1,idx)  =state_g_m(1,idx)+sg0*cc
+
+ cc=dt*half/dy
+! sr0=(-dux    -dwz)*rho
+! sp0=(-dux    -dwz)*p(idx)
+! se0=(-dux    -dwz)*cons(5,idx)
+! sg0=(-dux    -dwz)*adindx(idx)
+!
+! y dir
+ state_d_p(2,idx)  =state_d_p(2,idx)+sr0*cc
+ state_u_p(2,1,idx)=state_u_p(2,1,idx)+su0*cc
+ state_u_p(2,2,idx)=state_u_p(2,2,idx)+sv0*cc
+ state_u_p(2,3,idx)=state_u_p(2,3,idx)+sw0*cc
+ state_p_p(2,idx)  =state_p_p(2,idx)+sp0*cc
+ state_e_p(2,idx)  =state_e_p(2,idx)+se0*cc
+ state_g_p(2,idx)  =state_g_p(2,idx)+sg0*cc
+!
+ state_d_m(2,idx)  =state_d_m(2,idx)+sr0*cc
+ state_u_m(2,1,idx)=state_u_m(2,1,idx)+su0*cc
+ state_u_m(2,2,idx)=state_u_m(2,2,idx)+sv0*cc
+ state_u_m(2,3,idx)=state_u_m(2,3,idx)+sw0*cc
+ state_p_m(2,idx)  =state_p_m(2,idx)+sp0*cc
+ state_e_m(2,idx)  =state_e_m(2,idx)+se0*cc
+ state_g_m(2,idx)  =state_g_m(2,idx)+sg0*cc
+
+ cc=dt*half/dz
+! sr0=(-dux-dvy    )*rho
+! sp0=(-dux-dvy    )*p(idx)
+! se0=(-dux-dvy    )*cons(5,idx)
+! sg0=(-dux-dvy    )*adindx(idx)
+!
+! z dir
+ state_d_p(3,idx)  =state_d_p(3,idx)+sr0*cc
+ state_u_p(3,1,idx)=state_u_p(3,1,idx)+su0*cc
+ state_u_p(3,2,idx)=state_u_p(3,2,idx)+sv0*cc
+ state_u_p(3,3,idx)=state_u_p(3,3,idx)+sw0*cc
+ state_p_p(3,idx)  =state_p_p(3,idx)+sp0*cc
+ state_e_p(3,idx)  =state_e_p(3,idx)+se0*cc
+ state_g_p(3,idx)  =state_g_p(3,idx)+sg0*cc
+!
+ state_d_m(3,idx)  =state_d_m(3,idx)+sr0*cc
+ state_u_m(3,1,idx)=state_u_m(3,1,idx)+su0*cc
+ state_u_m(3,2,idx)=state_u_m(3,2,idx)+sv0*cc
+ state_u_m(3,3,idx)=state_u_m(3,3,idx)+sw0*cc
+ state_p_m(3,idx)  =state_p_m(3,idx)+sp0*cc
+ state_e_m(3,idx)  =state_e_m(3,idx)+se0*cc
+ state_g_m(3,idx)  =state_g_m(3,idx)+sg0*cc
+
+
+end subroutine
+!
+!
+!
+
+subroutine get_fluxes(isten,fhll)
+ use parameters
+ use grid_commons
+ 
+ implicit none
+
+  integer::isten(5),idir,m_or_p,idx,imp
+  real(pre)::fluxes_l(5),fluxes_r(5),states_l(5),states_r(5),fhll(2,5)
   real(pre)::vxl,vxr,vyl,vyr,vzl,vzr,gl,gr,pl,pr,dl,dr,el,er,vr,vl,fac
 
-  call left_right_states(u(1,idx(1)),u(1,idx(2)),u(1,idx(3)),u(1,idx(4)),vxl,vxr)
-  call left_right_states(u(2,idx(1)),u(2,idx(2)),u(2,idx(3)),u(2,idx(4)),vyl,vyr)
-  call left_right_states(u(3,idx(1)),u(3,idx(2)),u(3,idx(3)),u(3,idx(4)),vzl,vzr)
-  call left_right_states(p(idx(1))  ,p(idx(2))  ,p(idx(3))  ,p(idx(4))  ,pl,pr)
-  call left_right_states(adindx(idx(1)),adindx(idx(2)),adindx(idx(3)),adindx(idx(4)),gl,gr)
-  call left_right_states(cons(1,idx(1)),cons(1,idx(2)),cons(1,idx(3)),cons(1,idx(4)),dl,dr)
-  call left_right_states(cons(5,idx(1)),cons(5,idx(2)),cons(5,idx(3)),cons(5,idx(4)),el,er)
+  idir=isten(5)
+  idx =isten(2)
 
-  if(idx(5)==1)then
-    vr=vxr
-    vl=vxl
-! left states
-    fluxes_l(1)=dl*vxl
-    fluxes_l(2)=dl*vxl*vxl+pl
-    fluxes_l(3)=dl*vyl*vxl
-    fluxes_l(4)=dl*vzl*vxl
-    fluxes_l(5)=vxl*(el+pl)
-! right states  
-    fluxes_r(1)=dr*vxr
-    fluxes_r(2)=dr*vxr*vxr+pr
-    fluxes_r(3)=dr*vyr*vxr
-    fluxes_r(4)=dr*vzr*vxr
-    fluxes_r(5)=vxr*(er+pr)
-  elseif(idx(5)==2)then
-    vr=vyr
-    vl=vyl
-! left states
-    fluxes_l(1)=dl*vyl
-    fluxes_l(2)=dl*vxl*vyl
-    fluxes_l(3)=dl*vyl*vyl+pl
-    fluxes_l(4)=dl*vzl*vyl
-    fluxes_l(5)=vyl*(el+pl)
-! right states  
-    fluxes_r(1)=dr*vyr
-    fluxes_r(2)=dr*vxr*vyr
-    fluxes_r(3)=dr*vyr*vyr+pr
-    fluxes_r(4)=dr*vzr*vyr
-    fluxes_r(5)=vyr*(er+pr)
-  else
-    vr=vzr
-    vl=vzl
- ! left states
-    fluxes_l(1)=dl*vzl
-    fluxes_l(2)=dl*vxl*vzl
-    fluxes_l(3)=dl*vyl*vzl
-    fluxes_l(4)=dl*vzl*vzl+pl
-    fluxes_l(5)=vzl*(el+pl)
-! right states  
-    fluxes_r(1)=dr*vzr
-    fluxes_r(2)=dr*vxr*vzr
-    fluxes_r(3)=dr*vyr*vzr
-    fluxes_r(4)=dr*vzr*vzr+pr
-    fluxes_r(5)=vzr*(er+pr)
-  endif
-!
+! complete minus state
+
+ do m_or_p=0,1
+
+  dl=state_d_p(idir,isten(1+m_or_p)) ! plus state of the minus cell
+  pl=state_p_p(idir,isten(1+m_or_p))
+  el=state_e_p(idir,isten(1+m_or_p))
+  gl=state_g_p(idir,isten(1+m_or_p))
+  vxl=state_u_p(idir,1,isten(1+m_or_p))
+  vyl=state_u_p(idir,2,isten(1+m_or_p))
+  vzl=state_u_p(idir,3,isten(1+m_or_p))
+   
   states_l(1)=dl
   states_l(2)=dl*vxl
   states_l(3)=dl*vyl
   states_l(4)=dl*vzl
   states_l(5)=el
-!
+
+  dr=state_d_m(idir,isten(2+m_or_p)) ! minus state of active cell
+  pr=state_p_m(idir,isten(2+m_or_p))
+  er=state_e_m(idir,isten(2+m_or_p))
+  gr=state_g_m(idir,isten(2+m_or_p))
+  vxr=state_u_m(idir,1,isten(2+m_or_p))
+  vyr=state_u_m(idir,2,isten(2+m_or_p))
+  vzr=state_u_m(idir,3,isten(2+m_or_p))
+   
   states_r(1)=dr
   states_r(2)=dr*vxr
   states_r(3)=dr*vyr
   states_r(4)=dr*vzr
   states_r(5)=er
 
-  call flux_hll(fluxes_l,fluxes_r,states_l,states_r,gl,gr,dl,dr,pl,pr,vl,vr,fhll)
+  fluxes_l=zero
+  fluxes_r=zero
+  if(isten(5)==1)then
+    vr=vxr
+    vl=vxl
+    fluxes_l(2)=pl
+    fluxes_r(2)=pr
+  elseif(isten(5)==2)then
+    vr=vyr
+    vl=vyl
+    fluxes_l(3)=pl
+    fluxes_r(3)=pr
+  else
+    vr=vzr
+    vl=vzl
+    fluxes_l(4)=pl
+    fluxes_r(4)=pr
+  endif
+
+!
+! left states
+!
+  fluxes_l(1)=states_l(1)*vl
+  fluxes_l(2)=fluxes_l(2)+states_l(2)*vl
+  fluxes_l(3)=fluxes_l(3)+states_l(3)*vl
+  fluxes_l(4)=fluxes_l(4)+states_l(4)*vl
+  fluxes_l(5)=(states_l(5)+pl)*vl
+!
+! right states  
+!
+  fluxes_r(1)=states_r(1)*vr
+  fluxes_r(2)=fluxes_r(2)+states_r(2)*vr
+  fluxes_r(3)=fluxes_r(3)+states_r(3)*vr
+  fluxes_r(4)=fluxes_r(4)+states_r(4)*vr
+  fluxes_r(5)=(states_r(5)+pr)*vr
+
+  imp=m_or_p+1
+  call flux_hll(fluxes_l,fluxes_r,states_l,states_r,gl,gr,dl,dr,pl,pr,vl,vr,fhll(imp,:))
+
+ enddo ! m_or_p
 
 end subroutine
 
@@ -297,6 +588,7 @@ subroutine flux_hll(fl,fr,ul,ur,gl,gr,dl,dr,pl,pr,vl,vr,fhll)
     real(pre)::fl(5),fr(5),fhll(5)
     real(pre)::ul(5),ur(5)
     real(pre)::gl,pl,dl,gr,pr,dr,cr,cl,ap,am,vr,vl
+    !print *,"In flux_hll",gr,gl,pl,pr,dr,dl
     cr=sqrt(gr*pr/dr)
     cl=sqrt(gl*pl/dl)
     ap=max(zero,vr+cr,vl+cl)
@@ -306,11 +598,11 @@ subroutine flux_hll(fl,fr,ul,ur,gl,gr,dl,dr,pl,pr,vl,vr,fhll)
     enddo
 end subroutine
 
-subroutine adjust_for_boundary(isten,ib,ig,flag)
+subroutine adjust_for_boundary(isten,ib,flag)
     use parameters
     use grid_commons
     implicit none
-    integer::flag,ib,ig,isten(5),i
+    integer::flag,ib,isten(5),i
     flag=0
     if(grid(isten(ib))%boundary>2)then
       flag=1

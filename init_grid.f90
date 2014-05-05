@@ -33,6 +33,27 @@ subroutine init_grid
  allocate(phi(ngrid))
  allocate(phi_new(ngrid))
 
+ allocate(slope_p(3,ngrid))
+ allocate(slope_d(3,ngrid))
+ allocate(slope_e(3,ngrid))
+ allocate(slope_g(3,ngrid))
+
+ allocate(slope_u(3,3,ngrid))
+
+ allocate(state_p_p(3,ngrid))
+ allocate(state_d_p(3,ngrid))
+ allocate(state_e_p(3,ngrid))
+ allocate(state_g_p(3,ngrid))
+ allocate(state_p_m(3,ngrid))
+ allocate(state_d_m(3,ngrid))
+ allocate(state_e_m(3,ngrid))
+ allocate(state_g_m(3,ngrid))
+
+
+ allocate(state_u_p(3,3,ngrid))
+ allocate(state_u_m(3,3,ngrid))
+
+ allocate(f_cor(3,5,ngrid))
 
  call first_touch() ! below
 
@@ -43,10 +64,15 @@ subroutine init_grid
  nghost=0
  nanchor=0
 
+ if (nz<6)then
+   no_outflow_zl=.false.
+   no_outflow_zr=.false.
+ endif
+
  igrid=0
  do iz=1,nz
-  flag1iz=0; if ((iz==1).or.(iz==nz))flag1iz=1
-  flag2iz=0; if ((iz==2).or.(iz==nz-1))flag2iz=1
+  flag1iz=0; if(nz>=6) then; if ((iz==1).or.(iz==nz))flag1iz=1; endif
+  flag2iz=0; if(nz>=6) then; if ((iz==2).or.(iz==nz-1))flag2iz=1; endif
   z=dz*(dble(iz)-(dble(nz)+one)/two)
   do iy=1,ny
     flag1iy=0; if ((iy==1).or.(iy==ny))flag1iy=1
@@ -149,9 +175,17 @@ subroutine init_grid
      elseif(iy==ny)then
        grid(igrid)%ineigh(1)=grid(igrid)%id-2*nx
      elseif(iz==1)then
+      if(nz<6)then ! if it is 2D, then just make it so.
+       grid(igrid)%ineigh(1)=grid(igrid)%id
+      else
        grid(igrid)%ineigh(1)=grid(igrid)%id+2*nx*ny
+      endif
      elseif(iz==nz)then
+      if(nz<6)then ! if 2D, make it so.
+       grid(igrid)%ineigh(1)=grid(igrid)%id
+      else
        grid(igrid)%ineigh(1)=grid(igrid)%id-2*nx*ny
+      endif
      else
        print *," Error. Grid boundary is not really a boundary."
        stop"Forced stop in init_grid"
@@ -174,9 +208,17 @@ subroutine init_grid
      elseif(iy==ny-1)then
        ineigh=grid(igrid)%id-nx
      elseif(iz==2)then
+      if(nz<6)then ! if 2D, make it so.
+       ineigh=grid(igrid)%id
+      else
        ineigh=grid(igrid)%id+nx*ny
+      endif
      elseif(iz==nz-1)then
+      if(nz<6)then ! if 2D, make it so.
+       ineigh=grid(igrid)%id
+      else
        ineigh=grid(igrid)%id-nx*ny
+      endif
      endif
 
      grid(igrid)%ineigh(1)=ineigh
@@ -188,8 +230,13 @@ subroutine init_grid
     grid(igrid)%ineigh(2)=grid(igrid)%id-nx
     grid(igrid)%ineigh(3)=grid(igrid)%id+1
     grid(igrid)%ineigh(4)=grid(igrid)%id-1
-    grid(igrid)%ineigh(5)=grid(igrid)%id+nx*ny
-    grid(igrid)%ineigh(6)=grid(igrid)%id-nx*ny
+    if(nz<6)then ! if 2D, make it so.
+      grid(igrid)%ineigh(5)=grid(igrid)%id
+      grid(igrid)%ineigh(6)=grid(igrid)%id
+    else
+      grid(igrid)%ineigh(5)=grid(igrid)%id+nx*ny
+      grid(igrid)%ineigh(6)=grid(igrid)%id-nx*ny
+    endif
    endif
  
  enddo
@@ -230,6 +277,7 @@ subroutine init_grid
    gforce(:,igrid)=zero
    pforce(:,igrid)=zero
    rhotot(igrid)=zero
+   fluxtmp(:,igrid)=zero
  enddo
 !$OMP ENDDO 
 !$OMP END PARALLEL 
