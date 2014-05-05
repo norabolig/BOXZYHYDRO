@@ -12,6 +12,12 @@ ny=200
 nz=8
 fluxangmom=.false.
 yoffset=0d0
+no_outflow_xl=.true.
+no_outflow_xr=.true.
+no_outflow_yl=.true.
+no_outflow_yr=.true.
+no_outflow_zl=.true.
+no_outflow_zr=.true.
 /
 
 &hydro

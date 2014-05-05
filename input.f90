@@ -5,7 +5,9 @@ module input
  use parameters
  implicit none
  namelist /io_control/write_ascii
- namelist /grid_params/nx,ny,nz,dx,dy,dz,yoffset,fluxangmom
+ namelist /grid_params/nx,ny,nz,dx,dy,dz,yoffset,fluxangmom, &
+   no_outflow_xl,no_outflow_xr,no_outflow_yl,no_outflow_yr, &
+   no_outflow_zl,no_outflow_zr
  namelist /hydro/ small_rho,small_eps,vlimit,endtime,den_change_tol, &
                   avmagx,avmagy,avmagz,dtout,starttime,irestart,cfl
  namelist /gravity/ yml_max,nrad_yml,anchor_space,grav_err_tol,miniter,grav_err_tol_low
