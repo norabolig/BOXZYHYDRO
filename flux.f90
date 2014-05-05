@@ -13,7 +13,7 @@ subroutine flux(avg)
 
  integer :: igrid,b(6),idim,isten(5),avg,flag
  real(pre)::fx(2,5),fy(2,5),fz(2,5),areaxy,areayz,areaxz
- real(pre)::vol,left
+ real(pre)::vol
  real(pre)::x,y,z,r,angmom,rmom
 
  type(units)::scale
@@ -22,8 +22,8 @@ subroutine flux(avg)
 
 !$OMP PARALLEL DEFAULT(SHARED) &
 !$OMP&PRIVATE(areaxy,areayz,areaxz,vol) &
-!$OMP&private(fz,fx,fy,left,right,flag) &
-!$OMP&private(b,angmom,rmom,x,y,z,r,isten,flag,corrL,corrR)
+!$OMP&private(fz,fx,fy,flag) &
+!$OMP&private(b,angmom,rmom,x,y,z,r,isten)
 
  areaxy=dy*dx
  areayz=dy*dz
