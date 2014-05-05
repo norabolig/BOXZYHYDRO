@@ -1,4 +1,4 @@
- FC=gfortran -O3 
+ FC=gfortran -O3  
 # POSSIBLE FLAGS
 # -DRADTRAN 
 # -DTHERMALHIST 
@@ -14,7 +14,8 @@
 # -DEXTERNALPHI
 # -DRUN_TEST_PHI
 # -DPOLYEOS
- FLAGS=-frecord-marker=4 -DVERBOSE -x f95-cpp-input  -Wall  #-ffpe-trap=zero,overflow,invalid
+# -DSLOPE_THETA
+ FLAGS=-frecord-marker=4  -DSLOPE_THETA=1.25 -DVERBOSE -x f95-cpp-input  -Wall #-DPOLYEOS #-ffpe-trap=zero,overflow,invalid
 
  OBJ = parameters.o derived_types.o \
        grid_commons.o eos.o input.o \
