@@ -36,12 +36,12 @@ module particle
   real(pre)::delx1,delx2,delx3,delx4,dely1,dely2,dely3,dely4,area1,area2,area3,area4
   real(pre)::weight
   integer,intent(out)::ig(8)
-  integer::iter,flag
+  integer::iter,flag,id
     flag=0
     call get_nearest_8(x,y,z,ig) ! 1-3 are low
     do iter=1,8
       if(ig(iter)<1.or.ig(iter)>ngrid)flag=1
-      if(grid(ig(iter))%boundary>0)flag=1
+      if(grid(ig(iter))%boundary==1.or.grid(ig(iter))%boundary==3)flag=1
     enddo
     if(flag==1)then
       ig=-1
@@ -62,14 +62,25 @@ module particle
     area1=delx3*dely3
     area2=delx4*dely4
  
-    w(1)=area1*(grid(ig(5))%z-z)
-    w(2)=area2*(grid(ig(5))%z-z)
-    w(3)=area3*(grid(ig(5))%z-z)
-    w(4)=area4*(grid(ig(5))%z-z)
-    w(5)=area1*(z-grid(ig(1))%z)
-    w(6)=area2*(z-grid(ig(1))%z)
-    w(7)=area3*(z-grid(ig(1))%z)
-    w(8)=area4*(z-grid(ig(1))%z)
+    if(.not.z==zero)then
+      w(1)=area1*(grid(ig(5))%z-z)
+      w(2)=area2*(grid(ig(5))%z-z)
+      w(3)=area3*(grid(ig(5))%z-z)
+      w(4)=area4*(grid(ig(5))%z-z)
+      w(5)=area1*(z-grid(ig(1))%z)
+      w(6)=area2*(z-grid(ig(1))%z)
+      w(7)=area3*(z-grid(ig(1))%z)
+      w(8)=area4*(z-grid(ig(1))%z)
+    else
+      w(1)=area1
+      w(2)=area2
+      w(3)=area3
+      w(4)=area4
+      w(5)=area1
+      w(6)=area2
+      w(7)=area3
+      w(8)=area4
+    endif
 
     weight=zero
     flag=0
@@ -112,6 +123,12 @@ module particle
   call get_units(scl)
   
   ds=sqrt(dx*dx+dy*dy+dz*dz)
+
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! First check whether we need to read in a file.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
   if(irestart>0.and. (.not.initialize_particles_now))then
    filename=""
    write(cindx,'(I8.8)')irestart
@@ -201,189 +218,20 @@ module particle
 
   else
 
-  if(npart>0)allocate(part(npart))
-  if(npart_direct>0)allocate(part_direct(npart_direct))
-  call srand(iseed)
-  id=0
-  isize=1
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! There is no particle file to read.  We need to set up the particles
+! according to user specifications.  This is done in particle_setup.inc
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+    if(npart>0)allocate(part(npart))
+    if(npart_direct>0)allocate(part_direct(npart_direct))
+    call srand(iseed)
+    id=0
+    isize=1
 
-  if(npart>0)then
-  do ipart=1,npart
-   part(ipart)%active=.true.
-!
-!***
-! The following is special use, and should be setup according to the user.
-! Will make this a separate file.
-!***
-
-   afit=0.00893405
-   bfit=-4.5
-   cfit=2.0
-
-   if (isize>3)then
-    r_ran=1.5d0+0.1*rand()**(1./3.)
-   else
-    r_ran = (log(one-rand())/bfit)**(one/cfit)
-   endif
-   theta_ran=acos(one-two*rand())   
-   phi_ran=two*pi*rand()
-
-   part(ipart)%x=r_ran*cos(phi_ran)*sin(theta_ran)
-   part(ipart)%y=r_ran*sin(phi_ran)*sin(theta_ran)
-   part(ipart)%z=r_ran*cos(theta_ran)
-!   if(ipart==1)then
-!     part(ipart)%x=zero
-!     part(ipart)%y=zero
-!     part(ipart)%z=zero
-!   endif
-   part(ipart)%m=pmass_factor/dble(NPART)
-   part(ipart)%vy=zero
-   part(ipart)%vx=zero
-   part(ipart)%vz=0.0
-   part(ipart)%fx=0.0
-   part(ipart)%fy=0.0
-   part(ipart)%fz=0.0
-   part(ipart)%soft=zero
-!
-!
-#ifdef WITHDRAG
-       part(ipart)%rho0=3./scl%density
-       if(isize==1)then
-           asize=1d-4/scl%length
-           isize=isize+1
-       elseif(isize==2)then
-           asize=1d-2/scl%length
-           isize=isize+1
-       elseif(isize==3)then
-           asize=1d0/scl%length
-           isize=isize+1
-       elseif(isize==4)then
-           asize=1d2/scl%length
-           isize=isize+1
-       else
-           asize=1d3/scl%length
-           isize=1
-       endif
-       part(ipart)%r=asize
-       part(ipart)%d=zero
-       part(ipart)%t=zero
-       part(ipart)%p=zero
-       part(ipart)%dm=zero
-       part(ipart)%tm=zero
-       part(ipart)%pm=zero
-#endif /* end ifdef WITHDRAG */
-!
-!
-   part(ipart)%id=id
-   id=id+1
-  enddo
-  endif 
-  if(npart_direct>0)then
-  momy=zero
-  momx=zero
-  mass=zero
-  do ipart=1,npart_direct
-  if(ipart==1)then
-!
-!***
-! The following is special use. Please redefine as necessary.
-! WIll eventually go into its own file.
-!***
-!
-  a=0.00d0
-  r=0d0
-  dphi=0.0
-  ecc=0.2
-  vt=0d0
-  vr=0d0
-  theta=half*pi
-  dphi=pi
-   part_direct(ipart)%active=.true.
-   part_direct(ipart)%x=r*cos(dphi)*sin(theta)
-   part_direct(ipart)%y=r*sin(dphi)*sin(theta)
-   part_direct(ipart)%z=r*cos(theta)
-   part_direct(ipart)%m=2.1d0
-   part_direct(ipart)%vy=(cos(dphi)*sin(theta)*vt+sin(dphi)*sin(theta)*vr)
-   part_direct(ipart)%vx=(cos(dphi)*sin(theta)*vr-sin(dphi)*sin(theta)*vt)
-   part_direct(ipart)%vz=zero
-   part_direct(ipart)%fx=zero
-   part_direct(ipart)%fy=zero
-   part_direct(ipart)%fz=zero
-   part_direct(ipart)%soft=0.1d0
-  else if (ipart==2) then
-  a=126d0
-  dphi=rand()*two*pi
-  ecc=0.11
-  r=a*(1.-ecc**2)/(1.+ecc*cos(dphi))
-  theta=half*pi
-  vr=ecc*sin(dphi)*sqrt(2.1/(a*(1.-ecc**2)))
-  vt=sqrt(2.1/(a*(1.-ecc**2)))*(1.+ecc*cos(dphi))
-   part_direct(ipart)%active=.true.
-   part_direct(ipart)%x=r*cos(dphi)*sin(theta)
-   part_direct(ipart)%y=r*sin(dphi)*sin(theta)
-   part_direct(ipart)%z=r*cos(theta)
-   part_direct(ipart)%m=6d-3/320.
-   part_direct(ipart)%vy=(cos(dphi)*sin(theta)*vt+sin(dphi)*sin(theta)*vr)
-   part_direct(ipart)%vx=(cos(dphi)*sin(theta)*vr-sin(dphi)*sin(theta)*vt)
-   part_direct(ipart)%vz=zero
-   part_direct(ipart)%fx=zero
-   part_direct(ipart)%fy=zero
-   part_direct(ipart)%fz=zero
-   part_direct(ipart)%soft=0.1d0
-   else if (ipart==3) then
-  a=158d0
-  dphi=rand()*two*pi
-  ecc=0.11
-  r=a*(1.-ecc**2)/(1.+ecc*cos(dphi))
-  theta=half*pi
-  vr=ecc*sin(dphi)*sqrt(2.1/(a*(1.-ecc**2)))
-  vt=sqrt(2.1/(a*(1.-ecc**2)))*(1.+ecc*cos(dphi))
-   part_direct(ipart)%active=.true.
-   part_direct(ipart)%x=r*cos(dphi)*sin(theta)
-   part_direct(ipart)%y=r*sin(dphi)*sin(theta)
-   part_direct(ipart)%z=r*cos(theta)
-   part_direct(ipart)%m=6d-3/320.
-   part_direct(ipart)%vy=(cos(dphi)*sin(theta)*vt+sin(dphi)*sin(theta)*vr)
-   part_direct(ipart)%vx=(cos(dphi)*sin(theta)*vr-sin(dphi)*sin(theta)*vt)
-   part_direct(ipart)%vz=zero
-   part_direct(ipart)%fx=zero
-   part_direct(ipart)%fy=zero
-   part_direct(ipart)%fz=zero
-   part_direct(ipart)%soft=0.1d0
-  else 
-  a=135.+rand()*16.
-  dphi=2.*pi*rand()
-  theta=acos(pi/180.*(1.-2.*rand()))
-  ecc=0.11
-  r=a*(1.-ecc**2)/(1.+ecc*cos(dphi))
-  vr=ecc*sin(dphi)*sqrt(2.1/(a*(1.-ecc**2)))
-  vt=sqrt(2.1/(a*(1.-ecc**2)))*(1.+ecc*cos(dphi))
-   part_direct(ipart)%active=.true.
-   part_direct(ipart)%x=r*cos(dphi)*sin(theta)
-   part_direct(ipart)%y=r*sin(dphi)*sin(theta)
-   part_direct(ipart)%z=r*cos(theta)
-   part_direct(ipart)%m=120d-3/320./dble(npart_direct-2)
-   part_direct(ipart)%vy=(cos(dphi)*sin(theta)*vt+sin(dphi)*sin(theta)*vr)
-   part_direct(ipart)%vx=(cos(dphi)*sin(theta)*vr-sin(dphi)*sin(theta)*vt)
-   part_direct(ipart)%vz=zero
-   part_direct(ipart)%fx=zero
-   part_direct(ipart)%fy=zero
-   part_direct(ipart)%fz=zero
-   part_direct(ipart)%soft=1.0d0
- 
-  endif 
-   momx=momx+part_direct(ipart)%vx*part_direct(ipart)%m
-   momy=momy+part_direct(ipart)%vy*part_direct(ipart)%m
-   mass=mass+part_direct(ipart)%m
-   part_direct(ipart)%id=id
-   id=id+1
-  enddo
-  do ipart=1,npart_direct
-    part_direct(ipart)%vx=part_direct(ipart)%vx-momx/mass
-    part_direct(ipart)%vy=part_direct(ipart)%vy-momy/mass
-  enddo
- 
-  endif
+#include "particle_user_init.inc"
+#include "particle_direct_user_init.inc"
 
   endif
  end subroutine
@@ -483,9 +331,7 @@ module particle
 
     call get_weights_8(ig,x,y,z,w)
     if(ig(1)==-1)then
-       print *, "Removing Particle :", ipart,x/dx,y/dy,z/dz
-       part(ipart)%active=.false.
-       cycle
+#include "particle_oob_user.inc"
     endif 
     do iter=1,8
 !$OMP ATOMIC
@@ -599,7 +445,7 @@ module particle
 !
 !$OMP DO SCHEDULE(STATIC)                                               &
 !$OMP&PRIVATE(x,y,z,vx,vy,vz,fx,fy,fz,ig,w,pfx,pfy,pfz,rhoa,d)          &
-!$OMP&PRIVATE(tg,pg,dg,alpha_loc,asize,de,ekin,t0,tR)
+!$OMP&PRIVATE(tg,pg,dg,alpha_loc,asize,de,ekin,t0,tR,iter)
   do ipart=1,npart
     if(.not.part(ipart)%active)cycle
     x=part(ipart)%x
@@ -614,9 +460,7 @@ module particle
 
     call get_weights_8(ig,x,y,z,w)
     if(ig(1)==-1)then
-       print *, "Removing Particle :", ipart,x/dx,y/dy,z/dz
-       part(ipart)%active=.false.
-       cycle
+#include "particle_oob_user.inc"
     endif 
  
     do iter=1,8
@@ -733,9 +577,7 @@ module particle
  
     call get_weights_8(ig,x,y,z,w)
     if(ig(1)==-1)then
-       print *, "Removing Particle :", ipart,x/dx,y/dy,z/dz
-       part_direct(ipart)%active=.false.
-       cycle
+#include "particle_direct_oob_user.inc"
     endif 
 
     do iter=1,8
