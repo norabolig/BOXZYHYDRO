@@ -45,3 +45,10 @@ gammafix=1.4d0
 tk_bgrnd=0.000000000001
 dTk_eos=3d1
 /
+
+&particle_input
+use_pic=.true.
+initialize_particles_now=.true.
+npart=100000
+npart_direct=0
+/
