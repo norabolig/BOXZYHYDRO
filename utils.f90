@@ -126,15 +126,15 @@ end function
       neigh=-1
       return
   endif 
-  call get_boundary(igrid,bb)
+  call get_boundary_wb(igrid,bb)
 
   delz=z-grid(igrid)%z
   if(delz<zero)then
      igrid=bb(6)
-     call get_boundary(igrid,bb)
+     call get_boundary_wb(igrid,bb)
   endif
   igridt=bb(5)
-  call get_boundary(igridt,bt)
+  call get_boundary_wb(igridt,bt)
   
   neigh(5)=bb(5)
   neigh(6)=igrid

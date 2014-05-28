@@ -1,11 +1,10 @@
-program sdxy
+program dyz
  implicit none
 
  integer,parameter::pre=8
  integer::nx=128,ny=128,nz=128,ix,iy,iz,idown,icheck=1234
- !real(pre)::dx=0.678d0,dy=0.678,dz=0.678d0
+ integer::SLICE=64 ! slice in x plane
  real(pre)::dx=1d0,dy=1d0,dz=1d0
- integer::offsetx=0
 
  character*72:: filename,input!="../celldump.00003750 "
  real(pre)::deltax,deltaz,h,lhex,xmin,xmax,ymin,ymax,zmin,zmax,pi,vol,dist,val,xx,yy,mass
@@ -160,7 +159,7 @@ program sdxy
  sig=0d0
  ixs=0
 ! do idx=1,nz 
-idx=nx/2+offsetx
+idx=SLICE
    do iz=1,nz
    do iy=1,ny
      iter=(iz-1)*nx*ny+(iy-1)*nx+idx

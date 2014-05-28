@@ -1,9 +1,10 @@
-program sdxy
+program vxy
  implicit none
 
  integer,parameter::pre=8
  integer::nx=128,ny=128,nz=64,ix,iy,iz,idown,icheck=1234
- real(pre)::dx=0.25d0,dy=0.25,dz=0.25d0,vmax=5d-1
+ integer::SLICE=64
+ real(pre)::dx=1.00d0,dy=1.00,dz=1.00d0,vmax=1d100
 
  character*72:: filename,input!="../celldump.00003750 "
  real(pre)::deltax,deltaz,h,lhex,xmin,xmax,ymin,ymax,zmin,zmax,pi,vol,dist,val,xx,yy,mass
@@ -158,7 +159,7 @@ program sdxy
  iter=0
  sig=0d0
 ! do idx=1,nz 
-idx=nz/2
+idx=SLICE
 iter=(idx-1)*nx*ny
    print *, '# level  ',idx, ' clear.'
    do ixs=1,nentryxy

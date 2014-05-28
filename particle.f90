@@ -6,6 +6,7 @@
 ! be particle-particle interactions using direct sum.
 !
 module particle
+!$ use omp_lib
  use parameters
  use derived_types
  use grid_commons
@@ -42,6 +43,8 @@ module particle
     do iter=1,8
       if(ig(iter)<1.or.ig(iter)>ngrid)flag=1
       if(grid(ig(iter))%boundary==1.or.grid(ig(iter))%boundary==3)flag=1
+!      print *, "BOUNDARY VALUE = ",grid(ig(iter))%boundary," for neighbor ",iter
+!      print *, x/dx,y/dy,z/dz,flag,ig(iter),ngrid
     enddo
     if(flag==1)then
       ig=-1
@@ -61,6 +64,10 @@ module particle
     area4=delx2*dely2
     area1=delx3*dely3
     area2=delx4*dely4
+
+    if (area1<0.0.or.area2<0.0.or.area3<0.0.or.area4<0.0)then
+       print *, "AREA PROBLEM ",area1,area2,area3,area4
+    endif
  
     if(.not.z==zero)then
       w(1)=area1*(grid(ig(5))%z-z)
@@ -86,6 +93,10 @@ module particle
     flag=0
     do iter=1,8
      weight=weight+w(iter)
+     if(w(iter)<0)then
+        print *, "WEIGHT I ",iter,w(iter)
+        print *, grid(ig(5))%z, grid(ig(1))%z,z,z/dz+nz/2
+     endif
      if(w(iter)<0)flag=1
     enddo
     if (weight<=zero)flag=1
@@ -216,6 +227,7 @@ module particle
    enddo
    close(101)
 
+
   else
 
 !
@@ -315,15 +327,21 @@ module particle
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
  subroutine add_particle_density()
-  integer::ipart,ig(8),iter
-  real(pre)::x,y,z,d,vol
-  real(pre)::w(8)
+  integer::ipart,ig(8),iter,np_reset_limit,nthreads
+  real(pre)::x,y,z,d,vol,r
+  real(pre)::w(8),step_release
 
   vol=dx*dy*dz
+  nthreads=1
+  np_reset_limit=0
+  step_release=zero
+!$ nthreads=omp_get_num_threads()
 
 !$OMP DO SCHEDULE(STATIC) 
   do ipart=1,npart
-    if(.not.part(ipart)%active)cycle
+    if(.not.part(ipart)%active)then
+#include "particle_false_user.inc"
+    endif
     x=part(ipart)%x
     y=part(ipart)%y
     z=part(ipart)%z
@@ -418,13 +436,17 @@ module particle
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
  subroutine kick_particles(t)
-  integer::ipart,ig(8),iter
+  integer::ipart,ig(8),iter,nthreads,np_reset_limit
   real(pre),intent(in)::t
-  real(pre)::x,y,z,vx,vy,vz,fx,fy,fz,de,ekin,t0,tR
+  real(pre)::x,y,z,r,vx,vy,vz,fx,fy,fz,de,ekin,t0,tR
   real(pre)::w(8),azimuth
   real(pre)::dfx,dfy,dfz,d,pg,tg,dg,vol,rhoa,asize,d_loc,tdrag
-  real(pre)::pfx,pfy,pfz,alpha_loc,omega,omega2
+  real(pre)::pfx,pfy,pfz,alpha_loc,omega,omega2,step_release
   integer::niter,idrag
+  nthreads=1
+  np_reset_limit=0
+  step_release=zero
+!$ nthreads=omp_get_num_threads()
 
 #ifdef ROTATE
   real(pre)::x0
@@ -445,9 +467,12 @@ module particle
 !
 !$OMP DO SCHEDULE(STATIC)                                               &
 !$OMP&PRIVATE(x,y,z,vx,vy,vz,fx,fy,fz,ig,w,pfx,pfy,pfz,rhoa,d)          &
-!$OMP&PRIVATE(tg,pg,dg,alpha_loc,asize,de,ekin,t0,tR,iter)
+!$OMP&PRIVATE(tg,pg,dg,alpha_loc,asize,de,ekin,t0,tR,iter,r)
   do ipart=1,npart
-    if(.not.part(ipart)%active)cycle
+    if(.not.part(ipart)%active)then
+#include "particle_false_user.inc"
+    endif
+
     x=part(ipart)%x
     y=part(ipart)%y
     z=part(ipart)%z
@@ -855,9 +880,9 @@ endif
  integer::ipart
 !$OMP MASTER
  if(npart>0)then
-  do ipart=1,5!npart
+  do ipart=1,1!5!npart
 !   if (ipart==51) then
-   !if (ipart<=npart) then
+!   if (ipart<=npart) then
 !
 !
 #ifdef THERMALHIST

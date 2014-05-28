@@ -3,8 +3,8 @@ program sdxy
 
  integer,parameter::pre=8
  integer::nx=100,ny=200,nz=8,ix,iy,iz,idown,icheck=1234
- !real(pre)::dx=0.678d0,dy=0.678,dz=0.678d0
- real(pre)::dx=0.125d0,dy=0.125d0,dz=0.125d0
+ integer::SLICE=4 ! slize in z plane
+ real(pre)::dx=1.000d0,dy=1.000d0,dz=1.000d0
 
  character*72:: filename,input!="../celldump.00003750 "
  real(pre)::deltax,deltaz,h,lhex,xmin,xmax,ymin,ymax,zmin,zmax,pi,vol,dist,val,xx,yy,mass
@@ -158,7 +158,7 @@ program sdxy
  iter=0
  sig=0d0
 ! do idx=1,nz 
-idx=nz/2
+idx=SLICE
 iter=(idx-1)*nx*ny
    print *, '# level  ',idx, ' clear.'
    do ixs=1,nentryxy
