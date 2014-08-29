@@ -18,8 +18,6 @@ subroutine init_grid
  ngrid=nx*ny*nz
  print *,"# Total grid elements = ",ngrid
 
-!$OMP PARALLEL DEFAULT(SHARED)
-!$OMP MASTER
  allocate(grid(ngrid))
  allocate(p  (ngrid))
  allocate(adindx  (ngrid))
@@ -56,11 +54,8 @@ subroutine init_grid
  allocate(state_u_m(3,3,ngrid))
 
  allocate(f_cor(3,5,ngrid))
-!$OMP END MASTER
-!$OMP BARRIER
 
  call first_touch() ! below
-!$OMP END PARALLEL
 
  max_den_change_old=one
  max_den_old=zero
@@ -127,7 +122,7 @@ subroutine init_grid
 !
 !
 #ifdef EXTRAANCHORS 
-  paf=object_radius
+  paf=object_radius  !planet radius
 
  do igrid=1,ngrid
    x=grid(igrid)%x
@@ -135,7 +130,9 @@ subroutine init_grid
    z=grid(igrid)%z
 
    flag=0
-   if ( x*x+y*y+z*z>paf**2)flag=1
+   ! set object geometry here
+   if ( (x+object_x_displace)**2 + (y+object_y_displace)**2 + (z+object_z_displace)**2 < paf**2 )flag=1
+     !( (x+object_x_displace)**2 + y*y + z*z < paf**2 )flag=1
 
     if (flag==1.and.grid(igrid)%boundary==0)then
       nanchor=nanchor+1
@@ -204,20 +201,6 @@ subroutine init_grid
      ineigh=0
      grid(igrid)%ineigh(:)=ineigh
 
-     grid(igrid)%ineigh(1)=grid(igrid)%id+nx
-     grid(igrid)%ineigh(2)=grid(igrid)%id-nx
-     grid(igrid)%ineigh(3)=grid(igrid)%id+1
-     grid(igrid)%ineigh(4)=grid(igrid)%id-1
-     if(nz<6)then ! if 2D, make it so.
-       grid(igrid)%ineigh(5)=grid(igrid)%id
-       grid(igrid)%ineigh(6)=grid(igrid)%id
-     else
-       grid(igrid)%ineigh(5)=grid(igrid)%id+nx*ny
-       grid(igrid)%ineigh(6)=grid(igrid)%id-nx*ny
-     endif
- 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!! I THINK THE FOLLOWING SHOULD BE REMOVED, BUT KEEPING IT FOR RECORD
 !     if(ix==2)then 
 !       ineigh=grid(igrid)%id+1
 !     elseif(ix==nx-1)then
@@ -236,12 +219,23 @@ subroutine init_grid
 !      if(nz<6)then ! if 2D, make it so.
 !       ineigh=grid(igrid)%id
 !      else
-!       ineigh=grid(igrid)%id-nx*ny
-!      endif
-!     endif
-!
-!     grid(igrid)%ineigh(1)=ineigh
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!       ineigh=grid(igrid)%id-nx*ny
+ !     endif
+ !    endif
+
+  !   grid(igrid)%ineigh(1)=ineigh
+
+    grid(igrid)%ineigh(1)=grid(igrid)%id+nx
+    grid(igrid)%ineigh(2)=grid(igrid)%id-nx
+    grid(igrid)%ineigh(3)=grid(igrid)%id+1
+    grid(igrid)%ineigh(4)=grid(igrid)%id-1
+    if(nz<6)then ! if 2D, make it so.
+      grid(igrid)%ineigh(5)=grid(igrid)%id
+      grid(igrid)%ineigh(6)=grid(igrid)%id
+    else
+      grid(igrid)%ineigh(5)=grid(igrid)%id+nx*ny
+      grid(igrid)%ineigh(6)=grid(igrid)%id-nx*ny
+    endif
 
    else
 
@@ -273,6 +267,7 @@ subroutine init_grid
   implicit none
   integer :: igrid
 
+!$OMP PARALLEL 
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
    grid(igrid)%x=zero
@@ -296,31 +291,9 @@ subroutine init_grid
    pforce(:,igrid)=zero
    rhotot(igrid)=zero
    fluxtmp(:,igrid)=zero
-
-   slope_u(:,:,igrid)=zero
-   slope_d(:,igrid)=zero
-   slope_p(:,igrid)=zero
-   slope_d(:,igrid)=zero
-   slope_e(:,igrid)=zero
-   slope_g(:,igrid)=zero
-
-   state_u_p(:,:,igrid)=zero
-   state_u_m(:,:,igrid)=zero
- 
-   state_d_p(:,igrid)=zero
-   state_d_m(:,igrid)=zero
-
-   state_p_p(:,igrid)=zero
-   state_p_m(:,igrid)=zero
-
-   state_e_p(:,igrid)=zero
-   state_e_m(:,igrid)=zero
-
-   state_g_p(:,igrid)=zero
-   state_g_m(:,igrid)=zero
-
  enddo
 !$OMP ENDDO 
+!$OMP END PARALLEL 
 
  end subroutine
  

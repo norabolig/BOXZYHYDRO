@@ -1,3 +1,4 @@
+
 !
 ! A collection of a variety of functions and routines for the code
 !
@@ -294,22 +295,40 @@ end function
     cons(5,idx)= cons(5,ip)
  end subroutine
 !
+ subroutine zero_flow_dir(idx,idir)
+  use grid_commons
+  integer::idx,idir
+    cons(5,idx)=max(cons(5,idx)-half*cons(idir,idx)**2/cons(1,idx),small_eps)
+    cons(idir+1,idx)=zero
+ end subroutine
+!
  subroutine set_ghost_cells()
   use grid_commons
   use eos, only : get_gamma_from_tk
-  integer::igrid,idx,idim,ineigh,ix,iy,iz,ip
+  integer::igrid,idx,idim,ineigh,ix,iy,iz,ip,ib
   real(pre)::v,eps,ploc,mucloc,adloc,fac(3)
   type(units)::scale
 
   call get_units(scale) ! units.f90
 
-!$OMP DO SCHEDULE(STATIC) PRIVATE(idx,ineigh,eps,mucloc,adloc,ix,iy,iz,fac,ip)
+!$OMP DO SCHEDULE(STATIC) PRIVATE(idx,ineigh,eps,mucloc,adloc,ix,iy,iz,fac,ip,ib)
   do igrid=1,nghost
     idx=indx_ghost(igrid)
     ix=grid(idx)%ix
     iy=grid(idx)%iy
     iz=grid(idx)%iz
-    ineigh=grid(idx)%ineigh(1)
+    ib=grid(idx)%boundary
+    if (ib==1)then
+       ineigh=grid(idx)%ineigh(1)
+    else
+       if    (ix==2   )then; ineigh=grid(idx)%ineigh(3)
+       elseif(ix==nx-1)then; ineigh=grid(idx)%ineigh(4)
+       elseif(iy==2   )then; ineigh=grid(idx)%ineigh(1)
+       elseif(iy==ny-1)then; ineigh=grid(idx)%ineigh(2)
+       elseif(iz==2   )then; ineigh=grid(idx)%ineigh(5)
+       elseif(iz==nz-1)then; ineigh=grid(idx)%ineigh(6)    
+       endif
+    endif
     ineigh=check_corner(ix,iy,iz,ineigh)
  
        do idim=1,5
@@ -382,6 +401,51 @@ end function
            call set_ghost_helper(idx,ip,fac)
          endif
        endif
+!! START for control valve
+#ifdef CONTROLVALVES
+       if(ix==1.or.ix==2)then        !negative x
+         idim=1
+         if(u(idim,idx)>zero)call zero_flow_dir(idx,idim)
+       endif
+!       if(ix==nx-1.or.ix==nx)then   !positve x
+!         idim=1
+!         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
+!       endif
+!       if(iy==1.or.iy==2)then       !negative y
+!         idim=2
+!         if(u(idim,idx)>zero)call zero_flow_dir(idx,idim)
+!       endif
+!       if(iy==ny.or.iy==ny-1)then    !positive y
+!         idim=2
+!         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
+!       endif
+!       if(iz==1.or.iz==2)then       !negative z
+!         idim=3
+!         if(u(idim,idx)>zero)call zero_flow_dir(idx,idim)
+!       endif
+!       if(iz==nz.or.iz==nz-1)then    !positive z
+!         idim=3
+!         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
+!       endif
+#endif /* end ifdef CONTROLVALVES */
+!! FINISH for control valve
+
+#ifdef WINDTUNNEL
+       if(ix==nx.or.ix==nx-1)then
+         u(1,idx)=-vflow
+         u(2,idx)=zero
+         u(3,idx)=zero
+         cons(1,idx)=rhoflow
+         cons(2,idx)=u(1,idx)*cons(1,idx)
+         cons(3,idx)=zero
+         cons(4,idx)=zero
+         call get_gamma_from_tk(eps,cons(1,idx),tkflow,mucloc,adloc)
+         adindx(idx)=adloc
+         p(idx)=scale%rgas*cons(1,idx)*tkflow/mucloc
+         cons(5,idx)=eps+half*cons(1,idx)*u(1,idx)**2
+       endif
+#endif /* end ifdef WINDTUNNEL */
+
   enddo
 !$OMP ENDDO
 !$OMP BARRIER

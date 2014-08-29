@@ -84,7 +84,7 @@ subroutine write_files(step)
 #ifdef WITHDRAG
 !
 !
-       write(100,'(I9,1X,I9,16(1X,1pe16.9),1X,L)')1,part_direct(ipart)%id, &
+       write(100,'(I9,1X,I9,16(1X,1pe16.9),1X,L1)')1,part_direct(ipart)%id, &
          part_direct(ipart)%x,part_direct(ipart)%y, &
          part_direct(ipart)%z,part_direct(ipart)%vx,part_direct(ipart)%vy, &
          part_direct(ipart)%vz,part_direct(ipart)%m,part_direct(ipart)%soft, &
@@ -102,7 +102,7 @@ subroutine write_files(step)
 #else
 !
 !
-       write(100,'(I9,1X,I9,8(1X,1pe16.9),1X,L)')1,part_direct(ipart)%id, &
+       write(100,'(I9,1X,I9,8(1X,1pe16.9),1X,L1)')1,part_direct(ipart)%id, &
          part_direct(ipart)%x,part_direct(ipart)%y, &
          part_direct(ipart)%z,part_direct(ipart)%vx,part_direct(ipart)%vy, &
          part_direct(ipart)%vz,part_direct(ipart)%m,part_direct(ipart)%soft, &
@@ -121,7 +121,7 @@ subroutine write_files(step)
 #ifdef WITHDRAG
 !
 !
-       write(100,'(I9,1X,I9,16(1X,1pe16.9),1X,L)')0,part(ipart)%id,part(ipart)%x,&
+       write(100,'(I9,1X,I9,16(1X,1pe16.9),1X,L1)')0,part(ipart)%id,part(ipart)%x,&
          part(ipart)%y,part(ipart)%z,part(ipart)%vx,part(ipart)%vy,part(ipart)%vz, &
          part(ipart)%m,part(ipart)%soft,&
          part(ipart)%rho0, &
@@ -138,7 +138,7 @@ subroutine write_files(step)
 #else
 !
 !
-       write(100,'(I9,1X,I9,8(1X,1pe16.9),1X,L)')0,part(ipart)%id,part(ipart)%x,&
+       write(100,'(I9,1X,I9,8(1X,1pe16.9),1X,L1)')0,part(ipart)%id,part(ipart)%x,&
          part(ipart)%y,part(ipart)%z,part(ipart)%vx,part(ipart)%vy,part(ipart)%vz, &
          part(ipart)%m,part(ipart)%soft,&
          part(ipart)%active

@@ -160,9 +160,9 @@ module particle
 !
 !
 #ifdef WITHDRAG
-     read(101,'(I9,1X,I9,16(1X,1pe16.9),1X,L)')istat,id,x,y,z,vx,vy,vz,m,soft,rhoa,asize,dg,tg,pg,dm,tm,pm,active
+     read(101,'(I9,1X,I9,16(1X,1pe16.9),1X,L1)')istat,id,x,y,z,vx,vy,vz,m,soft,rhoa,asize,dg,tg,pg,dm,tm,pm,active
 #else
-     read(101,'(I9,1X,I9,8(1X,1pe16.9),1X,L)')istat,id,x,y,z,vx,vy,vz,m,soft,active
+     read(101,'(I9,1X,I9,8(1X,1pe16.9),1X,L1)')istat,id,x,y,z,vx,vy,vz,m,soft,active
 #endif /* end ifdef WITHDRAG */
 !
 !
