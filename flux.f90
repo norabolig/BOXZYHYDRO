@@ -296,6 +296,8 @@ subroutine calculate_slopes(idx)
  integer,intent(in):: idx(5)
  integer:: idim,idir
 
+ real(pre)::eps(3)
+
  idir=idx(5)
 !
 ! slopes for velocity
@@ -306,9 +308,16 @@ subroutine calculate_slopes(idx)
 !
 ! slopes for pressure,density,energy,and gamma
 !
+  do idim=1,3
+    eps(idim)=max(cons(5,idx(idim))-half*(cons(2,idx(idim))**2 &
+                                   +cons(3,idx(idim))**2       &
+                                   +cons(4,idx(idim))**2       &
+                                   )/cons(1,idx(idim)),small_eps)
+  enddo
+!
   slope_p(idir,idx(2))=slope(p(idx(1)),p(idx(2)),p(idx(3)))
   slope_d(idir,idx(2))=slope(cons(1,idx(1)),cons(1,idx(2)),cons(1,idx(3)))
-  slope_e(idir,idx(2))=slope(cons(5,idx(1)),cons(5,idx(2)),cons(5,idx(3)))
+  slope_e(idir,idx(2))=slope(eps(1),eps(2),eps(3))
   slope_g(idir,idx(2))=slope(adindx(idx(1)),adindx(idx(2)),adindx(idx(3)))
  
 end subroutine
@@ -356,11 +365,14 @@ subroutine calculate_states(isten)
           state_u_p(idim,jdim,idx))
 !  
   enddo
+
+  eps = max(cons(5,idx)-half*(cons(2,idx)**2+cons(3,idx)**2+cons(4,idx)**2)/cons(1,idx),small_eps)
+
   call interface_muscl(p(idx),lambda_m,lambda_p,slope_p(idim,idx),state_p_m(idim,idx),&
        state_p_p(idim,idx))
   call interface_muscl(cons(1,idx),lambda_m,lambda_p,slope_d(idim,idx),state_d_m(idim,idx),&
       state_d_p(idim,idx))
-  call interface_muscl(cons(5,idx),lambda_m,lambda_p,slope_e(idim,idx),state_e_m(idim,idx),&
+  call interface_muscl(eps,lambda_m,lambda_p,slope_e(idim,idx),state_e_m(idim,idx),&
       state_e_p(idim,idx))
   call interface_muscl(adindx(idx),lambda_m,lambda_p,slope_g(idim,idx),state_g_m(idim,idx),&
       state_g_p(idim,idx))
@@ -420,18 +432,18 @@ subroutine calculate_states(isten)
 ! This can also be done with loops, etc., but I wrote it
 ! out so the cross terms become more apparent. 
 !
-! sr0=(    -dvy-dwz)*rho
-! sp0=(    -dvy-dwz)*p(idx)
-! se0=(    -dvy-dwz)*cons(5,idx)
-! sg0=(    -dvy-dwz)*adindx(idx)
+! sr0=  zero   -vvel*dry -wvel*drz
+! sp0=  zero   -vvel*dpy -wvel*dpz
+! se0=  zero   -vvel*dey -wvel*dez
+! sg0=  zero   -vvel*dgy -wvel*dgz
 ! x dir
  state_d_p(1,idx)  =state_d_p(1,idx)+sr0*cc
  state_u_p(1,1,idx)=state_u_p(1,1,idx)+su0*cc
  state_u_p(1,2,idx)=state_u_p(1,2,idx)+sv0*cc
  state_u_p(1,3,idx)=state_u_p(1,3,idx)+sw0*cc
  state_p_p(1,idx)  =state_p_p(1,idx)+sp0*cc
- state_e_p(1,idx)  =state_e_p(1,idx)+se0*cc
  state_g_p(1,idx)  =state_g_p(1,idx)+sg0*cc
+ state_e_p(1,idx)  =state_e_p(1,idx)+se0*cc
 !
  state_d_m(1,idx)  =state_d_m(1,idx)+sr0*cc
  state_u_m(1,1,idx)=state_u_m(1,1,idx)+su0*cc
@@ -442,10 +454,10 @@ subroutine calculate_states(isten)
  state_g_m(1,idx)  =state_g_m(1,idx)+sg0*cc
 
  cc=dt*half/dy
-! sr0=(-dux    -dwz)*rho
-! sp0=(-dux    -dwz)*p(idx)
-! se0=(-dux    -dwz)*cons(5,idx)
-! sg0=(-dux    -dwz)*adindx(idx)
+! sr0=  -uvel*drx   +zero -wvel*drz 
+! sp0=  -uvel*dpx   +zero -wvel*dpz 
+! se0=  -uvel*dex   +zero -wvel*dez 
+! sg0=  -uvel*dgx   +zero -wvel*dgz
 !
 ! y dir
  state_d_p(2,idx)  =state_d_p(2,idx)+sr0*cc
@@ -461,14 +473,15 @@ subroutine calculate_states(isten)
  state_u_m(2,2,idx)=state_u_m(2,2,idx)+sv0*cc
  state_u_m(2,3,idx)=state_u_m(2,3,idx)+sw0*cc
  state_p_m(2,idx)  =state_p_m(2,idx)+sp0*cc
- state_e_m(2,idx)  =state_e_m(2,idx)+se0*cc
  state_g_m(2,idx)  =state_g_m(2,idx)+sg0*cc
+ state_e_m(2,idx)  =state_e_m(2,idx)+se0*cc
 
  cc=dt*half/dz
-! sr0=(-dux-dvy    )*rho
-! sp0=(-dux-dvy    )*p(idx)
-! se0=(-dux-dvy    )*cons(5,idx)
-! sg0=(-dux-dvy    )*adindx(idx)
+
+! sr0=  -uvel*drx   -vvel*dry  +zero  
+! sp0=  -uvel*dpx   -vvel*dpy  +zero   
+! se0=  -uvel*dex   -vvel*dey  +zero  
+! sg0=  -uvel*dgx   -vvel*dgy  +zero
 !
 ! z dir
  state_d_p(3,idx)  =state_d_p(3,idx)+sr0*cc
@@ -476,16 +489,16 @@ subroutine calculate_states(isten)
  state_u_p(3,2,idx)=state_u_p(3,2,idx)+sv0*cc
  state_u_p(3,3,idx)=state_u_p(3,3,idx)+sw0*cc
  state_p_p(3,idx)  =state_p_p(3,idx)+sp0*cc
- state_e_p(3,idx)  =state_e_p(3,idx)+se0*cc
  state_g_p(3,idx)  =state_g_p(3,idx)+sg0*cc
+ state_e_p(3,idx)  =state_e_p(3,idx)+se0*cc
 !
  state_d_m(3,idx)  =state_d_m(3,idx)+sr0*cc
  state_u_m(3,1,idx)=state_u_m(3,1,idx)+su0*cc
  state_u_m(3,2,idx)=state_u_m(3,2,idx)+sv0*cc
  state_u_m(3,3,idx)=state_u_m(3,3,idx)+sw0*cc
  state_p_m(3,idx)  =state_p_m(3,idx)+sp0*cc
- state_e_m(3,idx)  =state_e_m(3,idx)+se0*cc
  state_g_m(3,idx)  =state_g_m(3,idx)+sg0*cc
+ state_e_m(3,idx)  =state_e_m(3,idx)+se0*cc
 
 
 end subroutine
@@ -522,7 +535,7 @@ subroutine get_fluxes(isten,fhll)
   states_l(2)=dl*vxl
   states_l(3)=dl*vyl
   states_l(4)=dl*vzl
-  states_l(5)=el
+  states_l(5)=el + half*dl*(vxl**2+vyl**2+vzl**2)
 
   dr=state_d_m(idir,isten(2+m_or_p)) ! minus state of active cell
   pr=state_p_m(idir,isten(2+m_or_p))
@@ -536,7 +549,7 @@ subroutine get_fluxes(isten,fhll)
   states_r(2)=dr*vxr
   states_r(3)=dr*vyr
   states_r(4)=dr*vzr
-  states_r(5)=er
+  states_r(5)=er + half*dr*(vxr**2+vyr**2+vzr**2)
 
   fluxes_l=zero
   fluxes_r=zero

@@ -415,18 +415,18 @@ end function
 !         idim=2
 !         if(u(idim,idx)>zero)call zero_flow_dir(idx,idim)
 !       endif
-!       if(iy==ny.or.iy==ny-1)then    !positive y
-!         idim=2
-!         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
-!       endif
+       if(iy==ny.or.iy==ny-1)then    !positive y
+         idim=2
+         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
+       endif
 !       if(iz==1.or.iz==2)then       !negative z
 !         idim=3
 !         if(u(idim,idx)>zero)call zero_flow_dir(idx,idim)
 !       endif
-!       if(iz==nz.or.iz==nz-1)then    !positive z
-!         idim=3
-!         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
-!       endif
+       if(iz==nz.or.iz==nz-1)then    !positive z
+         idim=3
+         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
+       endif
 #endif /* end ifdef CONTROLVALVES */
 !! FINISH for control valve
 
@@ -445,6 +445,17 @@ end function
          cons(5,idx)=eps+half*cons(1,idx)*u(1,idx)**2
        endif
 #endif /* end ifdef WINDTUNNEL */
+
+#ifdef SHOCKDIFF
+       if(iy>ny/2.and.(ix==1.or.ix==2))then
+         cons(1,idx)=5.0293806477913563d0
+         p(idx)=21.471035714285712d0
+         u(1,idx)=4.0779469548133598d0
+         cons(2,idx)=u(1,idx)*cons(1,idx) 
+         cons(5,idx)=p(idx)/(adindx(idx)-1.0)+0.5*cons(2,idx)**2/cons(1,idx)
+       endif
+#endif /* end ifdef SHOCKDIFF */
+
 
   enddo
 !$OMP ENDDO
