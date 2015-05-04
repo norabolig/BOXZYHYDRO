@@ -453,7 +453,7 @@ module eos
       endif
     enddo
    if(flag>1)then
-     eng=eng_table(NEOS,irho)
+     if(.not.extend_table)eng=eng_table(NEOS,irho)
    elseif(flag>0)then
      eng=eng_table(1,irho)
    endif
@@ -508,8 +508,10 @@ module eos
       endif
     enddo
    if(flag>1)then
-     eng=eng_table(NEOS,irho)
-     eps=eng*rho ! note that this does change the energy
+     if(.not.extend_table)then
+         eng=eng_table(NEOS,irho)
+         eps=eng*rho ! note that this does change the energy
+     endif
    elseif(flag>0)then
      eng=eng_table(1,irho)
      eps=eng*rho ! note that this does change the energy
@@ -555,8 +557,10 @@ module eos
     ientry=int( (log10(eng)-log10(eng_table2(1,irho)))/deng_eos_array(irho)) + 1
     if (ientry>NEOS-1)then
          ientry=NEOS-1
-         eng=eng_table2(NEOS,irho)
-         eps=eng*rho
+         if(.not.extend_table)then
+           eng=eng_table2(NEOS,irho)
+           eps=eng*rho
+         endif
     endif
     if(ientry<1.or.eng<eng_table2(1,irho))then
       !print *, rho,eng,eps,irho
@@ -673,7 +677,7 @@ module eos
       endif
     enddo
    if(flag>1)then
-     p_loc=p_table(NEOS,irho)
+     if(.not.extend_table)p_loc=p_table(NEOS,irho)
    elseif(flag>0)then
      p_loc=p_table(1,irho)
    endif
