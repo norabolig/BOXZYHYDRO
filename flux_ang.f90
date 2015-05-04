@@ -3,7 +3,7 @@
 ! At the moment, variables f2,f1,f0,fm1 are calculated but not used
 ! This will likely be removed, but it may stick around for a bit
 !
-subroutine flux(avg)
+subroutine flux_ang(avg)
  use parameters
  use derived_types
  use grid_commons
@@ -41,7 +41,6 @@ subroutine flux(avg)
 ! If angular momentum fluxing is used, make a variable switch.
 !***
 !
- if(fluxangmom)then
 !$OMP DO SCHEDULE(STATIC) PRIVATE(x,y,rmom,angmom)
   do igrid=1,ngrid
      x=grid(igrid)%x;y=grid(igrid)%y+yoffset
@@ -60,7 +59,6 @@ subroutine flux(avg)
  
   enddo
 !$OMP ENDDO
- endif
 !
 !***
 ! Enter main loop
@@ -71,7 +69,7 @@ subroutine flux(avg)
 !$OMP DO SCHEDULE(static)
  do igrid=1,ngrid
 
-  call clear_slope(igrid)
+  call clear_slope_ang(igrid)
   fluxtmp(:,igrid)=zero
 
   if(grid(igrid)%boundary>0)then
@@ -85,21 +83,21 @@ subroutine flux(avg)
   isten(3)  = b(3)
   isten(5)  = 1
 
-  call calculate_slopes(isten) ! only indices 1:3 matter here
+  call calculate_slopes_ang(isten) ! only indices 1:3 matter here
 
   isten(1)  = b(2)
   isten(2)  = igrid
   isten(3)  = b(1)
   isten(5)  = 2
 
-  call calculate_slopes(isten) ! only indices 1:3 matter here
+  call calculate_slopes_ang(isten) ! only indices 1:3 matter here
 
   isten(1)  = b(6)
   isten(2)  = igrid
   isten(3)  = b(5)
   isten(5)  = 3
 
-  call calculate_slopes(isten) ! only indices 1:3 matter here
+  call calculate_slopes_ang(isten) ! only indices 1:3 matter here
 
  enddo
 !$OMP ENDDO 
@@ -122,19 +120,19 @@ subroutine flux(avg)
   isten(2)  = igrid
   isten(3)  = b(3)
 
-  call calculate_states(isten) ! only indices 1:3 matter here
+  call calculate_states_ang(isten) ! only indices 1:3 matter here
 
   isten(1)  = b(2)
   isten(2)  = igrid
   isten(3)  = b(1)
 
-  call calculate_states(isten) ! only indices 1:3 matter here
+  call calculate_states_ang(isten) ! only indices 1:3 matter here
 
   isten(1)  = b(6)
   isten(2)  = igrid
   isten(3)  = b(5)
 
-  call calculate_states(isten) ! only indices 1:3 matter here
+  call calculate_states_ang(isten) ! only indices 1:3 matter here
 
  enddo
 !$OMP ENDDO 
@@ -154,7 +152,7 @@ subroutine flux(avg)
   isten(3)  = b(3)
   isten(5)  = 1
 
-  call get_fluxes(isten,fx) 
+  call get_fluxes_ang(isten,fx) 
   flag=0
   call adjust_for_boundary(isten,3,flag)
   if(flag==1)then
@@ -173,7 +171,7 @@ subroutine flux(avg)
   isten(3)  = b(1)
   isten(5)  = 2
 
-  call get_fluxes(isten,fy) 
+  call get_fluxes_ang(isten,fy) 
   flag=0
   call adjust_for_boundary(isten,3,flag)
   if(flag==1)then
@@ -193,7 +191,7 @@ subroutine flux(avg)
   isten(3)  = b(5)
   isten(5)  = 3
 
-  call get_fluxes(isten,fz) 
+  call get_fluxes_ang(isten,fz) 
   flag=0
   call adjust_for_boundary(isten,3,flag)
   if(flag==1)then
@@ -213,6 +211,10 @@ subroutine flux(avg)
                            areaxz*(fy(2,idim)-fy(1,idim))+&
                            areaxy*(fz(2,idim)-fz(1,idim)))*dt/vol
   enddo
+!  x=grid(igrid)%x
+!  y=grid(igrid)%y
+!  r=sqrt(x*x+y*y)
+!  fluxtmp(3,igrid)=fluxtmp(3,igrid)+p(igrid)*( x*y)/r*dt
  enddo
 !$OMP ENDDO 
 !$OMP BARRIER
@@ -248,7 +250,6 @@ endif
 ! If fluxing angular momentum, put it back into linear momentum.
 !***
 !
- if(fluxangmom)then
 !$OMP DO SCHEDULE(STATIC) private(x,y,r,angmom,rmom) !!!private(ekin)
  do igrid=1,ngrid
     x=grid(igrid)%x;y=grid(igrid)%y+yoffset
@@ -264,14 +265,15 @@ endif
 
 
 
-    angmom=cons_old(3,igrid)
-    rmom=cons_old(2,igrid)
-    cons_old(3,igrid)=(rmom*y*r+x*angmom)/r**2
-    cons_old(2,igrid)=(x*cons_old(3,igrid)-angmom)/y
+    if(avg>0)then
+      angmom=cons_old(3,igrid)
+      rmom=cons_old(2,igrid)
+      cons_old(3,igrid)=(rmom*y*r+x*angmom)/r**2
+      cons_old(2,igrid)=(x*cons_old(3,igrid)-angmom)/y
+    endif
  
  enddo
 !$OMP ENDDO
- endif ! fluxangmom
  
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
@@ -287,7 +289,7 @@ endif
 
 end subroutine
 
-subroutine clear_slope(id)
+subroutine clear_slope_ang(id)
  use parameters
  use grid_commons
  implicit none
@@ -299,15 +301,13 @@ subroutine clear_slope(id)
  slope_d(:,id)=zero
  slope_e(:,id)=zero
  slope_g(:,id)=zero
- if(fluxangmom)then
-   slope_rmom(:,id)=zero
-   slope_amom(:,id)=zero
- endif
+ slope_rmom(:,id)=zero
+ slope_amom(:,id)=zero
 end subroutine
 !
 !
 !
-subroutine calculate_slopes(idx)
+subroutine calculate_slopes_ang(idx)
  use parameters
  use grid_commons
  use utils,only:slope
@@ -325,10 +325,8 @@ subroutine calculate_slopes(idx)
  do idim=1,3
    slope_u(idir,idim,idx(2))=slope(u(idim,idx(1)),u(idim,idx(2)),u(idim,idx(3)))
  enddo
- if(fluxangmom)then
-     slope_rmom(idir,idx(2))=slope(cons(2,idx(1)),cons(2,idx(2)),cons(2,idx(3)))
-     slope_amom(idir,idx(2))=slope(cons(3,idx(1)),cons(3,idx(2)),cons(3,idx(3)))
- endif
+ slope_rmom(idir,idx(2))=slope(cons(2,idx(1)),cons(2,idx(2)),cons(2,idx(3)))
+ slope_amom(idir,idx(2))=slope(cons(3,idx(1)),cons(3,idx(2)),cons(3,idx(3)))
 !
 ! slopes for pressure,density,energy,and gamma
 !
@@ -357,20 +355,7 @@ end subroutine
 !
 !
 !
-subroutine interface_muscl(q,lm,lp,s,minus,plus)
- use parameters
- real(pre),intent(in)::q,lp,lm,s
- real(pre)::minus,plus
-!
- minus=q+half*(-one-lm)*s
- plus =q+half*( one-lp)*s
-!
-!
-end subroutine
-!
-!
-!
-subroutine calculate_states(isten)
+subroutine calculate_states_ang(isten)
  use parameters
  use grid_commons
  use eos, only :  get_gamma_from_p
@@ -398,12 +383,10 @@ subroutine calculate_states(isten)
           state_u_p(idim,jdim,idx))
 !  
   enddo
-  if(fluxangmom)then
-     call interface_muscl(cons(2,idx),lambda_m,lambda_p,slope_rmom(idim,idx),state_rmom_m(idim,idx),&
-          state_rmom_p(idim,idx))
-     call interface_muscl(cons(3,idx),lambda_m,lambda_p,slope_amom(idim,idx),state_amom_m(idim,idx),&
-          state_amom_p(idim,idx))
-  endif
+  call interface_muscl(cons(2,idx),lambda_m,lambda_p,slope_rmom(idim,idx),state_rmom_m(idim,idx),&
+        state_rmom_p(idim,idx))
+  call interface_muscl(cons(3,idx),lambda_m,lambda_p,slope_amom(idim,idx),state_amom_m(idim,idx),&
+        state_amom_p(idim,idx))
 
   !eps = max(cons(5,idx)-half*(cons(2,idx)**2+cons(3,idx)**2+cons(4,idx)**2)/cons(1,idx),small_eps)
   eps = max(cons(5,idx)-half*cons(1,idx)*(u(1,idx)**2+u(2,idx)**2+u(3,idx)**2),small_eps)
@@ -546,7 +529,7 @@ end subroutine
 !
 !
 
-subroutine get_fluxes(isten,fhll)
+subroutine get_fluxes_ang(isten,fhll)
  use parameters
  use grid_commons
  
@@ -555,6 +538,7 @@ subroutine get_fluxes(isten,fhll)
   integer::isten(5),idir,m_or_p,idx,imp
   real(pre)::fluxes_l(5),fluxes_r(5),states_l(5),states_r(5),fhll(2,5)
   real(pre)::vxl,vxr,vyl,vyr,vzl,vzr,gl,gr,pl,pr,dl,dr,el,er,vr,vl,fac
+  real(pre)::x,y,r
 
   idir=isten(5)
   idx =isten(2)
@@ -572,8 +556,8 @@ subroutine get_fluxes(isten,fhll)
   vzl=state_u_p(idir,3,isten(1+m_or_p))
    
   states_l(1)=dl
-  states_l(2)=dl*vxl
-  states_l(3)=dl*vyl
+  states_l(2)=state_rmom_p(idir,isten(1+m_or_p))
+  states_l(3)=state_amom_p(idir,isten(1+m_or_p))
   states_l(4)=dl*vzl
   states_l(5)=el + half*dl*(vxl**2+vyl**2+vzl**2)
 
@@ -586,31 +570,31 @@ subroutine get_fluxes(isten,fhll)
   vzr=state_u_m(idir,3,isten(2+m_or_p))
    
   states_r(1)=dr
-  states_r(2)=dr*vxr
-  states_r(3)=dr*vyr
+  states_r(2)=state_rmom_m(idir,isten(2+m_or_p))
+  states_r(3)=state_amom_m(idir,isten(2+m_or_p))
   states_r(4)=dr*vzr
   states_r(5)=er + half*dr*(vxr**2+vyr**2+vzr**2)
 
-  if(fluxangmom)then
-      states_l(2)=state_rmom_p(idir,isten(1+m_or_p))
-      states_l(3)=state_amom_p(idir,isten(1+m_or_p))
-
-      states_r(2)=state_rmom_m(idir,isten(2+m_or_p))
-      states_r(3)=state_amom_m(idir,isten(2+m_or_p))
-  endif
-
   fluxes_l=zero
   fluxes_r=zero
+  x=grid(idx)%x
+  y=grid(idx)%y
+  r=sqrt(x*x+y*y)
   if(isten(5)==1)then
     vr=vxr
     vl=vxl
-    fluxes_l(2)=pl
-    fluxes_r(2)=pr
+ 
+    fluxes_l(2)=pl*x/r
+    fluxes_r(2)=pr*x/r
+    fluxes_l(3)=-pl*y
+    fluxes_r(3)=-pr*y
   elseif(isten(5)==2)then
     vr=vyr
     vl=vyl
-    fluxes_l(3)=pl
-    fluxes_r(3)=pr
+    fluxes_l(2)=pl*y/r
+    fluxes_r(2)=pr*y/r
+    fluxes_l(3)=pl*x
+    fluxes_r(3)=pr*x
   else
     vr=vzr
     vl=vzl
@@ -641,32 +625,3 @@ subroutine get_fluxes(isten,fhll)
  enddo ! m_or_p
 
 end subroutine
-
-subroutine flux_hll(fl,fr,ul,ur,gl,gr,dl,dr,pl,pr,vl,vr,fhll)
-    use parameters
-    implicit none
-    integer::i
-    real(pre)::fl(5),fr(5),fhll(5)
-    real(pre)::ul(5),ur(5)
-    real(pre)::gl,pl,dl,gr,pr,dr,cr,cl,ap,am,vr,vl
-    !print *,"In flux_hll",gr,gl,pl,pr,dr,dl
-    cr=sqrt(gr*pr/dr)
-    cl=sqrt(gl*pl/dl)
-    ap=max(zero,vr+cr,vl+cl)
-    am=max(zero,-(vr-cr),-(vl-cl))
-    do i=1,5
-       fhll(i)=(ap*fl(i)+am*fr(i)-ap*am*(ur(i)-ul(i)))/(ap+am)
-    enddo
-end subroutine
-
-subroutine adjust_for_boundary(isten,ib,flag)
-    use parameters
-    use grid_commons
-    implicit none
-    integer::flag,ib,isten(5),i
-    flag=0
-    if(grid(isten(ib))%boundary>2)then
-      flag=1
-    endif
-end subroutine 
-

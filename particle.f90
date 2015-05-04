@@ -119,7 +119,8 @@ module particle
  subroutine initialize_particles()
   integer::ipart,id,iseed=314,istat,step,isize
   real(pre)::dphi,r,z,rpoly=12.,momx,momy,mass,afit,bfit,cfit,r_ran,theta_ran,phi_ran
-  real(pre)::vcyl,vr,fexp,vz,vx,vy,x,y,m,soft,dtheta,theta,vt,a,ecc
+  real(pre)::vcyl,vr,fexp,vz,vx,vy,x,y,m,soft,dtheta,theta,vt,a,ecc,phi_loc,h
+  real(pre)::m1=1.d-3,m2=1.d-3
 !
 !
 #ifdef WITHDRAG
@@ -517,7 +518,11 @@ module particle
     enddo
 
 
-    d=part(ipart)%m/vol
+    if(nz<6)then 
+      d=part(ipart)%m/(dx*dy)
+    else
+      d=part(ipart)%m/vol
+    endif
     rhoa=part(ipart)%rho0
     asize=part(ipart)%r
     call get_drag(dfx,dfy,dfz,tg,pg,dg,x,y,z,vx,vy,vz, &
@@ -690,16 +695,16 @@ endif
   real(pre)::xi,yi,zi,mi,si,xj,yj,zj,mj,sj,r,fxi,fyi,fzi,fxj,fyj,fzj
  
   if(npart_direct>0)then
-!
-!
-!$OMP DO SCHEDULE(STATIC)
-  do ipart=1,npart_direct
-   part_direct(ipart)%fx=zero
-   part_direct(ipart)%fy=zero
-   part_direct(ipart)%fz=zero
-  enddo
-!$OMP ENDDO
-!$OMP BARRIER
+!!
+!! Forces should now be zeroed in a separate call before calc_grav
+!!$OMP DO SCHEDULE(STATIC)
+!  do ipart=1,npart_direct
+!   part_direct(ipart)%fx=zero
+!   part_direct(ipart)%fy=zero
+!   part_direct(ipart)%fz=zero
+!  enddo
+!!!$OMP ENDDO
+!!!$OMP BARRIER
 !
 !$OMP DO SCHEDULE(STATIC)
   do ipart=1,npart_direct
@@ -767,6 +772,45 @@ endif
   endif
  end subroutine
 !
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Zero forces for indirect particles.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!
+ subroutine zero_forces_on_indirect()
+  integer::ipart
+!$OMP DO SCHEDULE(STATIC)
+  do ipart=1,npart
+   part(ipart)%fx=zero
+   part(ipart)%fy=zero
+   part(ipart)%fz=zero
+  enddo
+!$OMP ENDDO
+  return
+ end subroutine
+!
+
+!
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Zero forces for direct sum particles on PIC particles.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!
+ subroutine zero_forces_on_direct()
+  integer::ipart
+!$OMP DO SCHEDULE(STATIC)
+  do ipart=1,npart_direct
+   part_direct(ipart)%fx=zero
+   part_direct(ipart)%fy=zero
+   part_direct(ipart)%fz=zero
+  enddo
+!$OMP ENDDO
+  return
+ end subroutine
+!
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Add force of direct sum particles on PIC particles.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -775,14 +819,6 @@ endif
   integer::ipart,jpart
   real(pre)::xi,yi,zi,xj,yj,zj,mi,si,sj,mj,r,fxi,fyi,fzi
  
-!$OMP DO SCHEDULE(STATIC)
-  do ipart=1,npart
-   part(ipart)%fx=zero
-   part(ipart)%fy=zero
-   part(ipart)%fz=zero
-  enddo
-!$OMP ENDDO
-!$OMP BARRIER
   if(npart_direct>0)then
 !$OMP DO SCHEDULE(STATIC)
   do ipart=1,npart_direct
@@ -828,7 +864,7 @@ endif
 !
  subroutine add_direct_togrid()
   integer::jpart,igrid
-  real(pre)::xi,yi,zi,xj,yj,zj,sj,mj,r,fxi,fyi,fzi
+  real(pre)::xi,yi,zi,xj,yj,zj,sj,mj,r,fxi,fyi,fzi,mgmj
 
   if(npart_direct>0)then
 !
@@ -866,6 +902,12 @@ endif
      gforce(2,igrid)=gforce(2,igrid)+fyi
 !$OMP ATOMIC
      gforce(3,igrid)=gforce(3,igrid)+fzi
+#ifdef BACKREACTION_DIRECT
+     mgmj=cons(1,igrid)*dx*dy*dz/mj
+     part_direct(jpart)%fx=part_direct(jpart)%fx-fxi*mgmj
+     part_direct(jpart)%fy=part_direct(jpart)%fy-fyi*mgmj
+     part_direct(jpart)%fz=part_direct(jpart)%fz-fzi*mgmj
+#endif
    enddo
   enddo
 !$OMP ENDDO
@@ -878,8 +920,9 @@ endif
 !
  subroutine print_select_particles()
  integer::ipart
+ return
 !$OMP MASTER
- if(npart>0)then
+ if(npart_direct>0)then
   do ipart=1,1!5!npart
 !   if (ipart==51) then
 !   if (ipart<=npart) then
@@ -890,8 +933,11 @@ endif
         part(ipart)%z,part(ipart)%vx,part(ipart)%vy,part(ipart)%vz,&
         part(ipart)%d, part(ipart)%t,part(ipart)%p
 #else
-      print "(A10,I6,1X,7(1pe16.8))", "PARTICLE:",ipart,time,part(ipart)%x,part(ipart)%y, &
-        part(ipart)%z,part(ipart)%vx,part(ipart)%vy,part(ipart)%vz
+      print "(A10,I6,1X,7(1pe16.8))", "PARTICLE:",ipart,time,part_direct(ipart)%x,part_direct(ipart)%y, &
+        part_direct(ipart)%z,part_direct(ipart)%vx,part_direct(ipart)%vy,part_direct(ipart)%vz, &
+        part_direct(ipart)%fx,part_direct(ipart)%fy,part_direct(ipart)%fz
+!      print "(A10,I6,1X,7(1pe16.8))", "PARTICLE:",ipart,time,part(ipart)%x,part(ipart)%y, &
+!        part(ipart)%z,part(ipart)%vx,part(ipart)%vy,part(ipart)%vz
 #endif /* end ifdef THERMALHIST */
 !
 !

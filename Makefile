@@ -1,4 +1,4 @@
- FC=gfortran -O3  
+ FC=gfortran -O3 -g -fopenmp
 # POSSIBLE FLAGS
 # -DRADTRAN 
 # -DTHERMALHIST 
@@ -15,13 +15,15 @@
 # -DRUN_TEST_PHI
 # -DPOLYEOS
 # -DSLOPE_THETA
- FLAGS=-frecord-marker=4  -DSLOPE_THETA=1.25 -DVERBOSE -x f95-cpp-input  -Wall #-DPOLYEOS #-ffpe-trap=zero,overflow,invalid
+# -DBACKREACTION_DIRECT
+ FLAGS=-frecord-marker=4 -DTHERMALHIST -DWITHDRAG -DPARTICLE -DPOLYEOS  -DSLOPE_THETA=1.25 -DVERBOSE -x f95-cpp-input  -Wall -ffpe-trap=zero,overflow,invalid
+# FLAGS=-frecord-marker=4 -DPOLYEOS  -DSLOPE_THETA=1.25 -DVERBOSE -x f95-cpp-input  -Wall #-DPOLYEOS #-ffpe-trap=zero,overflow,invalid
 
  OBJ = parameters.o derived_types.o \
        grid_commons.o eos.o input.o \
        utils.o mcrtfld.o gravity.o \
        pdrag.o particle.o init_grid.o \
-       units.o flux.o source.o \
+       units.o flux.o flux_ang.o source.o \
        velocity.o state.o init_conditions.o \
        read_hydro.o write_files.o courant.o avisc.o cleanup.o main.o
 

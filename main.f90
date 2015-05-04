@@ -316,7 +316,11 @@ do
 !
 
  dt=dt*two
- call flux(0) ! flux.f90
+ if(fluxangmom)then
+   call flux_ang(0) ! flux_ang.f90
+ else
+   call flux(0) ! flux.f90
+ endif
 
 !$OMP PARALLEL 
 !
@@ -334,7 +338,11 @@ do
 !
 !$OMP END PARALLEL
 !
- call flux(1)
+ if(fluxangmom)then
+    call flux_ang(1)
+ else
+    call flux(1)
+ endif
 
 !$OMP PARALLEL DEFAULT(SHARED) 
 !
