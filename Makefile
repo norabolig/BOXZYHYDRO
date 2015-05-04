@@ -1,4 +1,4 @@
- FC=gfortran -O3 -g -fopenmp
+ FC=gfortran -O3 -fopenmp
 # POSSIBLE FLAGS
 # -DRADTRAN 
 # -DTHERMALHIST 
@@ -16,8 +16,7 @@
 # -DPOLYEOS
 # -DSLOPE_THETA
 # -DBACKREACTION_DIRECT
- FLAGS=-frecord-marker=4 -DTHERMALHIST -DWITHDRAG -DPARTICLE -DPOLYEOS  -DSLOPE_THETA=1.25 -DVERBOSE -x f95-cpp-input  -Wall -ffpe-trap=zero,overflow,invalid
-# FLAGS=-frecord-marker=4 -DPOLYEOS  -DSLOPE_THETA=1.25 -DVERBOSE -x f95-cpp-input  -Wall #-DPOLYEOS #-ffpe-trap=zero,overflow,invalid
+ FLAGS=-frecord-marker=4 -DSLOPE_THETA=1.25 -DVERBOSE -x f95-cpp-input  -Wall -ffpe-trap=zero,overflow,invalid
 
  OBJ = parameters.o derived_types.o \
        grid_commons.o eos.o input.o \
