@@ -38,31 +38,6 @@ subroutine flux(avg)
 !
 !
 !***
-! If angular momentum fluxing is used, make a variable switch.
-!***
-!
- if(fluxangmom)then
-!$OMP DO SCHEDULE(STATIC) PRIVATE(x,y,rmom,angmom)
-  do igrid=1,ngrid
-     x=grid(igrid)%x;y=grid(igrid)%y+yoffset
-     r=sqrt(x*x+y*y)
-     angmom=x*cons(3,igrid)-y*cons(2,igrid)
-     rmom=cons(2,igrid)*x/r+cons(3,igrid)*y/r
-     cons(2,igrid)=rmom
-     cons(3,igrid)=angmom
-
-    if(avg>0)then 
-     angmom=x*cons_old(3,igrid)-y*cons_old(2,igrid)
-     rmom=cons_old(2,igrid)*x/r+cons_old(3,igrid)*y/r
-     cons_old(2,igrid)=rmom
-     cons_old(3,igrid)=angmom
-    endif
- 
-  enddo
-!$OMP ENDDO
- endif
-!
-!***
 ! Enter main loop
 !***
 !
@@ -244,34 +219,6 @@ endif
 ! Put things back in order
 !***
 !
-!***
-! If fluxing angular momentum, put it back into linear momentum.
-!***
-!
- if(fluxangmom)then
-!$OMP DO SCHEDULE(STATIC) private(x,y,r,angmom,rmom) !!!private(ekin)
- do igrid=1,ngrid
-    x=grid(igrid)%x;y=grid(igrid)%y+yoffset
-    r=sqrt(x*x+y*y)
-    angmom=cons(3,igrid)
-    rmom=cons(2,igrid)
-    cons(3,igrid)=(rmom*y*r+x*angmom)/r**2
-    cons(2,igrid)=(x*cons(3,igrid)-angmom)/y
-
-!     if(grid(igrid)%iy==ny/2)then
-!       print *, "CHECK ",x,y,z,rmom,angmom
-!     endif
-
-
-
-    angmom=cons_old(3,igrid)
-    rmom=cons_old(2,igrid)
-    cons_old(3,igrid)=(rmom*y*r+x*angmom)/r**2
-    cons_old(2,igrid)=(x*cons_old(3,igrid)-angmom)/y
- 
- enddo
-!$OMP ENDDO
- endif ! fluxangmom
  
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,ngrid
@@ -299,10 +246,6 @@ subroutine clear_slope(id)
  slope_d(:,id)=zero
  slope_e(:,id)=zero
  slope_g(:,id)=zero
- if(fluxangmom)then
-   slope_rmom(:,id)=zero
-   slope_amom(:,id)=zero
- endif
 end subroutine
 !
 !
@@ -325,10 +268,6 @@ subroutine calculate_slopes(idx)
  do idim=1,3
    slope_u(idir,idim,idx(2))=slope(u(idim,idx(1)),u(idim,idx(2)),u(idim,idx(3)))
  enddo
- if(fluxangmom)then
-     slope_rmom(idir,idx(2))=slope(cons(2,idx(1)),cons(2,idx(2)),cons(2,idx(3)))
-     slope_amom(idir,idx(2))=slope(cons(3,idx(1)),cons(3,idx(2)),cons(3,idx(3)))
- endif
 !
 ! slopes for pressure,density,energy,and gamma
 !
@@ -398,12 +337,6 @@ subroutine calculate_states(isten)
           state_u_p(idim,jdim,idx))
 !  
   enddo
-  if(fluxangmom)then
-     call interface_muscl(cons(2,idx),lambda_m,lambda_p,slope_rmom(idim,idx),state_rmom_m(idim,idx),&
-          state_rmom_p(idim,idx))
-     call interface_muscl(cons(3,idx),lambda_m,lambda_p,slope_amom(idim,idx),state_amom_m(idim,idx),&
-          state_amom_p(idim,idx))
-  endif
 
   !eps = max(cons(5,idx)-half*(cons(2,idx)**2+cons(3,idx)**2+cons(4,idx)**2)/cons(1,idx),small_eps)
   eps = max(cons(5,idx)-half*cons(1,idx)*(u(1,idx)**2+u(2,idx)**2+u(3,idx)**2),small_eps)
@@ -590,14 +523,6 @@ subroutine get_fluxes(isten,fhll)
   states_r(3)=dr*vyr
   states_r(4)=dr*vzr
   states_r(5)=er + half*dr*(vxr**2+vyr**2+vzr**2)
-
-  if(fluxangmom)then
-      states_l(2)=state_rmom_p(idir,isten(1+m_or_p))
-      states_l(3)=state_amom_p(idir,isten(1+m_or_p))
-
-      states_r(2)=state_rmom_m(idir,isten(2+m_or_p))
-      states_r(3)=state_amom_m(idir,isten(2+m_or_p))
-  endif
 
   fluxes_l=zero
   fluxes_r=zero
