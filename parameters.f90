@@ -60,6 +60,8 @@ module parameters
  integer::NEOS_RHO=500
  integer::H2STAT=0 ! 0 mixture, 1 equilibrium, -1 fixed gamma
 !
+ logical::extend_table=.true.
+!
 !***
 !hydro
 !***

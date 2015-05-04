@@ -480,6 +480,21 @@ end function
  end subroutine
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Calculate cubic spline for softening potential.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ real(pre) function wspline3(x)
+  real(pre), intent(in)::x
+   if (x<one)then
+     wspline3= x*(1.5d0*x-0.75d0*x*x)
+   elseif (x<two) then
+     wspline3=one-0.25d0*(two-x)**3
+   else
+     wspline3=one
+   endif
+ end function
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Calculate gravitational force from grid.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !

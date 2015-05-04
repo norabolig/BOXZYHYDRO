@@ -17,7 +17,10 @@ module grid_commons
  real(pre),dimension(:,:),allocatable::state_d_p,state_d_m
  real(pre),dimension(:,:),allocatable::state_e_p,state_e_m
  real(pre),dimension(:,:),allocatable::state_g_p,state_g_m
+ real(pre),dimension(:,:),allocatable::state_rmom_p,state_rmom_m
+ real(pre),dimension(:,:),allocatable::state_amom_p,state_amom_m
  real(pre),dimension(:,:),allocatable::slope_p,slope_d,slope_e,slope_g
+ real(pre),dimension(:,:),allocatable::slope_rmom,slope_amom
  real(pre),dimension(:,:,:),allocatable::state_u_p,state_u_m,slope_u,f_cor
 
  real(pre),dimension(:),allocatable::tk_table,rho_table,deng_eos_array

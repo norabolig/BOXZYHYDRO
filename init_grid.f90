@@ -53,7 +53,16 @@ subroutine init_grid
  allocate(state_u_p(3,3,ngrid))
  allocate(state_u_m(3,3,ngrid))
 
- allocate(f_cor(3,5,ngrid))
+ if(fluxangmom)then
+   allocate(state_rmom_m(3,ngrid))
+   allocate(state_amom_m(3,ngrid))
+   allocate(state_rmom_p(3,ngrid))
+   allocate(state_amom_p(3,ngrid))
+   allocate(slope_rmom(3,ngrid))
+   allocate(slope_amom(3,ngrid))
+ endif
+
+! allocate(f_cor(3,5,ngrid))
 
  call first_touch() ! below
 
