@@ -7,8 +7,7 @@
 !    * gas-drag coupling, including feedback reactions
 !    * particle-in-cell + particle-particle N-body
 !  o flux linear or angular momentum 
-!  o Tadmore & Kalgnor fluxing with min-mod flux limiter
-!  o arbitrary boundaries for creating wind tunnels, etc.
+!  o arbitrary boundaries and grid structures for creating wind tunnels, etc.
 !
 program boxzyhydro
 !
