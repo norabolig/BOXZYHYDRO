@@ -9,7 +9,7 @@ dy=0.01d0
 dz=0.01d0
 nx=8
 ny=200
-nz=8
+nz=1
 fluxangmom=.false.
 yoffset=0d0
 no_outflow_xl=.true.
@@ -50,5 +50,7 @@ dTk_eos=3d1
 use_pic=.true.
 initialize_particles_now=.true.
 npart=100000
+ntrace=0
+nstep_print_part=10
 npart_direct=0
 /

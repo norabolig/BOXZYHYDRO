@@ -923,7 +923,7 @@ endif
  return
 !$OMP MASTER
  if(npart_direct>0)then
-  do ipart=1,1!5!npart
+  do ipart=1,ntrace
 !   if (ipart==51) then
 !   if (ipart<=npart) then
 !

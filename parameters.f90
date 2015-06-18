@@ -117,6 +117,8 @@ module parameters
 !
  integer::npart=100000
  integer::npart_direct=0
+ integer::ntrace=1
+ integer::nstep_print_part=10
  real(pre)::tg_immediate_couple=1450d0
  real(pre)::a_sublimate_limit=6.67e-20
  logical::use_pic=.true.

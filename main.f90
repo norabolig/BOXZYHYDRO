@@ -227,7 +227,7 @@ do
 #ifdef PARTICLE
 !
 !
- call print_select_particles() ! particle.f90
+ if(mod(step,nstep_print_part)==0)call print_select_particles() ! particle.f90
 !
 !
 #ifdef NOHYDRO /* If no hydro, limit the starting point for the timestep solver. */

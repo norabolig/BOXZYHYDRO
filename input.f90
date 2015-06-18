@@ -13,7 +13,8 @@ module input
  namelist /gravity/ yml_max,nrad_yml,anchor_space,grav_err_tol,miniter,grav_err_tol_low
  namelist /eos_input/mu_z,brot,vib,dTk_eos,tk_bgrnd,ac,bc,gammafix,&
                xabun,yabun,zabun,NEOS_RHO,H2STAT
- namelist /particle_input/npart,npart_direct,tg_immediate_couple,a_sublimate_limit,use_pic,initialize_particles_now
+ namelist /particle_input/npart,npart_direct,tg_immediate_couple,&
+        a_sublimate_limit,use_pic,initialize_particles_now,ntrace,nstep_print_part
 
 
  contains
