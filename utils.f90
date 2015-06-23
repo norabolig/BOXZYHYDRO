@@ -42,7 +42,11 @@ end function
 
    igrid=(iz-1)*nx*ny
    
+#ifdef FLUX_CYL_Y
+   iy=int((y/dy+three))
+#else
    iy=int((y+half*dy)/dy+dble(ny+1)*half)
+#endif
    if(iy<1)iy=1
    if(iy>ny)iy=ny
 

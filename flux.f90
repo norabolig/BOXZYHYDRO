@@ -14,7 +14,7 @@ subroutine flux(avg)
  integer :: igrid,b(6),idim,isten(5),avg,flag
  real(pre)::fx(2,5),fy(2,5),fz(2,5),areaxy,areayz,areaxz
  real(pre)::vol
- real(pre)::x,y,z,r,angmom,rmom
+ real(pre)::y,sterm(5)
 
  type(units)::scale
 
@@ -23,7 +23,7 @@ subroutine flux(avg)
 !$OMP PARALLEL DEFAULT(SHARED) &
 !$OMP&PRIVATE(areaxy,areayz,areaxz,vol) &
 !$OMP&private(fz,fx,fy,flag) &
-!$OMP&private(b,angmom,rmom,x,y,z,r,isten)
+!$OMP&private(b,isten,y,sterm)
 
  areaxy=dy*dx
  areayz=dy*dz
@@ -183,11 +183,23 @@ subroutine flux(avg)
   endif
 
 
+#ifdef FLUX_CYL_Y
+  y = grid(igrid)%y
+  sterm=[zero,zero,p(igrid)/y*dt,zero,zero]
+  do idim=1,5
+     fluxtmp(idim,igrid)=-(areayz*(fx(2,idim)-fx(1,idim))+&
+                           areaxz*((y+half*dy)*fy(2,idim)-&
+                             (y-half*dy)*fy(1,idim))/y+&
+                           areaxy*(fz(2,idim)-fz(1,idim)))*dt/vol &
+                           + sterm(idim)
+  enddo
+#else
   do idim=1,5
      fluxtmp(idim,igrid)=-(areayz*(fx(2,idim)-fx(1,idim))+&
                            areaxz*(fy(2,idim)-fy(1,idim))+&
                            areaxy*(fz(2,idim)-fz(1,idim)))*dt/vol
   enddo
+#endif
  enddo
 !$OMP ENDDO 
 !$OMP BARRIER

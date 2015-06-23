@@ -86,7 +86,11 @@ subroutine init_grid
   do iy=1,ny
     flag1iy=0; if ((iy==1).or.(iy==ny))flag1iy=1
     flag2iy=0; if ((iy==2).or.(iy==ny-1))flag2iy=1
+#ifdef FLUX_CYL_Y
+    y=dy*(dble(iy-2)-half)
+#else
     y=dy*(dble(iy)-(dble(ny)+one)/two)
+#endif
     do ix=1,nx
       flag1ix=0; if ((ix==1).or.(ix==nx))flag1ix=1
       flag2ix=0; if ((ix==2).or.(ix==nx-1))flag2ix=1
@@ -140,7 +144,7 @@ subroutine init_grid
 
    flag=0
    ! set object geometry here
-   if ( (x+object_x_displace)**2 + (y+object_y_displace)**2 + (z+object_z_displace)**2 < paf**2 )flag=1
+   if ( (x)**2 + (y)**2 + (z)**2 < (ten*dy)**2 )flag=1
      !( (x+object_x_displace)**2 + y*y + z*z < paf**2 )flag=1
 
     if (flag==1.and.grid(igrid)%boundary==0)then
