@@ -73,6 +73,14 @@ subroutine init_grid
  nghost=0
  nanchor=0
 
+#ifdef FLUX_CYL_Y
+  print *, " USING FLUX_CYL_Y "
+  print *, " --> This will be a 3D sim with axisymmetry about the x axis."
+  print *, " --> Only adiabatic sims are guaranteed at the moment with this option."
+  if(nz>1)stop "Cannot use FLUX_CYL_Y with nz!=1"
+  if(fluxangmom)stop "Cannot use angular momentum fluxing with FLUX_CYL_Y "
+#endif
+
  if (nz<6)then
    no_outflow_zl=.false.
    no_outflow_zr=.false.
