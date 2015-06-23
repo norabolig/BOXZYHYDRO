@@ -16,7 +16,8 @@
 # -DPOLYEOS
 # -DSLOPE_THETA
 # -DBACKREACTION_DIRECT
- FLAGS=-frecord-marker=4 -DSLOPE_THETA=1.25 -DVERBOSE -x f95-cpp-input  -Wall -ffpe-trap=zero,overflow,invalid
+# -DFLUX_CYL_Y --> allows 3D sim in 2D by using the y coord as a radial coord and assuming axisymmetry about x axis.
+ FLAGS=-frecord-marker=4 -DSLOPE_THETA=1.25 -DVERBOSE -x f95-cpp-input  -Wall #-ffpe-trap=zero,overflow,invalid
 
  OBJ = parameters.o derived_types.o \
        grid_commons.o eos.o input.o \
