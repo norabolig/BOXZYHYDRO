@@ -920,13 +920,9 @@ endif
 !
  subroutine print_select_particles()
  integer::ipart
- return
 !$OMP MASTER
- if(npart_direct>0)then
+ if(ntrace>0)then
   do ipart=1,ntrace
-!   if (ipart==51) then
-!   if (ipart<=npart) then
-!
 !
 #ifdef THERMALHIST
       print "(A10,I6,1X,10(1pe16.8))", "PARTICLE:",ipart,time,part(ipart)%x,part(ipart)%y, &
