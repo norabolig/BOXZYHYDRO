@@ -1,4 +1,4 @@
-program sdxy
+program tyz
  implicit none
 
  integer,parameter::pre=8
@@ -6,7 +6,7 @@ program sdxy
  integer::SLICE=64
  real(pre)::dx=1d0,dy=1d0,dz=1d0
 
- character*72:: filename,input!="../celldump.00003750 "
+ character*72:: filename
  real(pre)::deltax,deltaz,h,lhex,xmin,xmax,ymin,ymax,zmin,zmax,pi,vol,dist,val,xx,yy,mass
  real(pre)::phase,area,val2,time
  real(pre),dimension(:),allocatable::x,y,z,rho,p,vx,vy,vz,phi,sort,eps,muc_array
@@ -30,50 +30,30 @@ program sdxy
 
  call getarg(1,filename)
  idx1=iargc()
- if(idx1/=2)then
+ if(idx1/=1)then
    print *,"Please give filename on command line and binary option [.true. or .false.]"
    stop
  endif
- call getarg(2,input)
- read(input,"(L)")binary
 
  nentry=0
- if (binary)then
 
-   open(unit=100,file=trim(filename),form="UNFORMATTED")
-   read(100)ihead
-   if (.not.ihead==icheck)then
-     print *, "Corrupted file or wrong endian.  Header flag fail."
-     stop
-   endif
-   read(100)time,ihead
-   read(100)scl
-   ioerr=0
-   do while (ioerr==0)
-     read(100,iostat=ioerr)
-     nentry=nentry+1
-   enddo
-   nentry=nentry-1
-   print *, "#Found ",nentry," entries for step ",ihead
-   print *, "#Scalings",scl
-   rewind(100)
- else
-   open(unit=100,file=trim(filename))
-   ioerr=0
-   ihead=1
-   nentry=0
-   do while (ioerr>-1)
-     if(ihead<3)then
-        read(100,"(A1)")junk
-        ihead=ihead+1
-     endif
-     read(100,"(A1)",iostat=ioerr)
-     nentry=nentry+1
-   enddo
-   nentry=nentry-1
-   print *, "#Found ",nentry," entries and ", ihead, " header entries"
-   rewind(100)
+ open(unit=100,file=trim(filename),form="UNFORMATTED")
+ read(100)ihead
+ if (.not.ihead==icheck)then
+   print *, "Corrupted file or wrong endian.  Header flag fail."
+   stop
  endif
+ read(100)time,ihead
+ read(100)scl
+ ioerr=0
+ do while (ioerr==0)
+   read(100,iostat=ioerr)
+   nentry=nentry+1
+ enddo
+ nentry=nentry-1
+ print *, "#Found ",nentry," entries for step ",ihead
+ print *, "#Scalings",scl
+ rewind(100)
  
  allocate(x(nentry))
  allocate(sort(nentry))
@@ -95,54 +75,28 @@ program sdxy
    stop
  endif
  
- if(binary)then
-   read(100)ihead
-   read(100)time,ihead
-   read(100)scl
-   xmin=0.;xmax=0.;ymin=0.;ymax=0.;zmin=0.;zmax=0.
-   iter=0
-   do iz=1,nz
-   do ix=1,nx
-   do iy=1,ny
-     iter=iter+1
-     read(100)x(iter),y(iter),z(iter),rho(iter),p(iter),&
-        vx(iter),vy(iter),vz(iter),phi(iter),eps(iter),muc_array(iter),boundary(iter)
-     indx_sort(iter)=iter
-     sort(iter)=x(iter)
-     if(xmax<x(iter))xmax=x(iter)
-     if(xmin>x(iter))xmin=x(iter)
-     if(ymax<y(iter))ymax=y(iter)
-     if(ymin>y(iter))ymin=y(iter)
-     if(zmax<z(iter))zmax=z(iter)
-     if(zmin>z(iter))zmin=z(iter)
-   enddo
-   enddo
-   enddo
- else
-   do iter=1,ihead-1
-     read(100,"(A1)")junk
-   enddo
-   xmin=0.;xmax=0.;ymin=0.;ymax=0.;zmin=0.;zmax=0.
-   iter=0
-   do iz=1,nz
-   do ix=1,nx
-   do iy=1,ny
-     iter=iter+1
-     read(100,"(11(1pe16.8e3,1X),I2)")x(iter),y(iter),z(iter),rho(iter),p(iter),&
-        vx(iter),vy(iter),vz(iter),phi(iter),eps(iter),muc_array(iter),boundary(iter)
-
-     indx_sort(iter)=iter
-     sort(iter)=x(iter)
-     if(xmax<x(iter))xmax=x(iter)
-     if(xmin>x(iter))xmin=x(iter)
-     if(ymax<y(iter))ymax=y(iter)
-     if(ymin>y(iter))ymin=y(iter)
-     if(zmax<z(iter))zmax=z(iter)
-     if(zmin>z(iter))zmin=z(iter)
-   enddo
-   enddo
-   enddo
- endif
+ read(100)ihead
+ read(100)time,ihead
+ read(100)scl
+ xmin=0.;xmax=0.;ymin=0.;ymax=0.;zmin=0.;zmax=0.
+ iter=0
+ do iz=1,nz
+ do ix=1,nx
+ do iy=1,ny
+   iter=iter+1
+   read(100)x(iter),y(iter),z(iter),rho(iter),p(iter),&
+      vx(iter),vy(iter),vz(iter),phi(iter),eps(iter),muc_array(iter),boundary(iter)
+   indx_sort(iter)=iter
+   sort(iter)=x(iter)
+   if(xmax<x(iter))xmax=x(iter)
+   if(xmin>x(iter))xmin=x(iter)
+   if(ymax<y(iter))ymax=y(iter)
+   if(ymin>y(iter))ymin=y(iter)
+   if(zmax<z(iter))zmax=z(iter)
+   if(zmin>z(iter))zmin=z(iter)
+ enddo
+ enddo
+ enddo
  close(100)
 
  nentryyz=nentry/nx
@@ -185,8 +139,6 @@ idx=SLICE
 enddo
  
  deallocate(x,y,z,rho,p,vx,vy,vz,phi,boundary)
-
- contains
 
 end program
 
