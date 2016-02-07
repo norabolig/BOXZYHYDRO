@@ -1,22 +1,22 @@
-Multipurpose, radiation hydrodynamics code with self-gravity and the ability to track particles.
-The code also converts to a particle-particle-particle-in-cell code.  The is still in a test
-phases.  
+Multipurpose, radiation hydrodynamics code with self-gravity, radiative transport, and the ability to track particles.
+The code also converts to a particle-particle-particle-in-cell code, with gas-drag terms.  The code is still being developed.
 
-o Type "make" to make with gcc.  
+The README will be updated as a markdown file soon.
+
+o To complile, type "make" to make with gcc.  
 
 o The code is currently set up to perform a Sod shock tube test.
 
 o After the code is compiled, run it using ./boxzy in.nml, where in.nml is the provided namelist file. Again
-  this is set up for the Sod shock tube test.
+  this is a set up for the Sod shock tube test.
 
-o After the simulation has finished, it will provide two outputs, celldump.00000001 and celldump.00000107, where
-  the numbers refer to the timestep. Please note that several additions have been made to the code, and your
-  test case may not end exactly at 107 -- the updated test case will be added soon, but the comparison will 
-  nonetheless be valid.  Go into the analysis directory, and type
+o After the simulation has finished, it will provide two outputs, such as celldump.00000001 and celldump.00000375, where
+  the numbers refer to the timestep (please note that several additions have been made to the code, and your
+  test case may not have a file that ends exactly at 375).  Go into the analysis directory, and type
 
   gfortran -o bin_to_ascii bin_to_ascii.f90
 
-  This execultable will now take the formatted celldump files and turn them into ascii format for quick plotting use.
+  This execultable will now take the formatted celldump files and turn them into an ascii format for quick plotting.
   Execute by typing
 
   ./bin_to_ascii ../celdump.00000375 T > mysod.dat
@@ -32,4 +32,4 @@ o After the simulation has finished, it will provide two outputs, celldump.00000
   The resulting plot will show the density profile.  The curves should be on top of each other, where sodtest.dat is
   a pregenerated file for comparisons.  2:5 will plot the pressure, and 2:($5/$4) will plot a specific energy-like term.
 
-  More soon.
+
