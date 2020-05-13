@@ -17,7 +17,7 @@ module selfgravity
  real(pre)::mbox,xcom_grid,ycom_grid,zcom_grid
  real(pre)::abin=20.,ebin=0.0d0,mbin=1d0
  integer,dimension(:),allocatable,save::gny,gnx,gnz,ngrav_grid,grav_bound_indx,ngrav_bound
- integer,save::nchild=8,nlevel=4,nmulti=1
+ integer,save::nchild=8,nlevel=6,nmulti=1
 
  real*8,save::thetaopen=0.7d0
 
@@ -75,9 +75,15 @@ subroutine init_grav_grid
  do ilevel=1,nlevel
    gdx(ilevel) = dx*two**(ilevel)
    gdy(ilevel) = dy*two**(ilevel)
-   gdz(ilevel) = dz*two**(ilevel)
    gnx(ilevel) = boxx/gdx(ilevel)
    gny(ilevel) = boxy/gdy(ilevel)
+
+   if (nz < 6) then
+     gdz(ilevel) = dz
+   else
+     gdz(ilevel) = dz*two**(ilevel)
+   endif
+
    gnz(ilevel) = boxz/gdz(ilevel)
 
    ngrav_grid(ilevel) = gnx(ilevel)*gny(ilevel)*gnz(ilevel)
@@ -1103,30 +1109,46 @@ end function
 ! Roche potential.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
- subroutine external_phi()! simple Roche potential
+ subroutine external_phi(tphase)! simple Roche potential
+  use utils, only: wspline3
   integer::igrid
-  real(pre)::x,y,z,omega2,pert
-  real(pre)::x0,y0,z0,mbin,mbox
-  real(pre)::xcom,ycom,zcom,plan,soft,r,rcycl
+  real(pre)::x,y,z,xobj,yobj,zobj,xmass,zmass,ymass,tphase
+  real(pre)::h1
+  real(pre)::r
+!!! Note: This is for a 2D simulation
 
+  xmass=zero
+  ymass=zero
+  zmass=zero
 
-  x0=abs(object_x_displace)
-  omega2=object_mass/x0**3
-  x0dot=-sqrt(omega2)*x0/(6d0*pi)
-  object_x_displace=object_x_displace-x0dot*dt
-  print *,"Updated semi-major axis and rate: ",time,object_x_displace,x0dot
+!$OMP PARALLEL DEFAULT(PRIVATE) REDUCTION(+:xmass,ymass,zmass)
+!$OMP DO SCHEDULE(STATIC)
+   do igrid=1,ngrid
+      x=grid(igrid)%x
+      y=grid(igrid)%y
+      z=grid(igrid)%z
 
+      xmass= xmass+x*cons(1,igrid)
+      ymass= ymass+y*cons(1,igrid)
+      zmass= zmass+z*cons(1,igrid)
 
-!$OMP PARALLEL DEFAULT(PRIVATE) SHARED(omega2,grid,phi,ngrid,dx,abin,object_mass,object_x_displace)
-  mbox=object_mass
+   enddo
+!$OMP ENDDO
+!$OMP ENDPARALLEL
+   
+  xobj = -xmass/object_mass
+  yobj = -ymass/object_mass
+  zobj = -zmass/object_mass
+
+!$OMP PARALLEL DEFAULT(PRIVATE)  &
+!$OMP& SHARED(grid,phi,ngrid,object_mass,object_radius,xobj,yobj)
 !$OMP DO SCHEDULE(STATIC)
   do igrid=1,ngrid
-    x=grid(igrid)%x-object_x_displace
-    y=grid(igrid)%y
-    z=grid(igrid)%z
-    r=sqrt(x*x+y*y+z*z)
-    pert=-mbox/r-half*omega2*(x*x+y*y)
-    phi(igrid)=phi(igrid)+pert
+    x=grid(igrid)%x-xobj
+    y=grid(igrid)%y-yobj
+    r=sqrt(x*x+y*y)
+    h1=r/object_radius
+    phi(igrid)=phi(igrid)-object_mass/r*wspline3(h1) 
   enddo
 !$OMP END DO
 !$OMP END PARALLEL
