@@ -46,13 +46,13 @@ subroutine flux_ang(avg)
      x=grid(igrid)%x;y=grid(igrid)%y+yoffset
      r=sqrt(x*x+y*y)
      angmom=x*cons(3,igrid)-y*cons(2,igrid)
-     rmom=cons(2,igrid)*x/r+cons(3,igrid)*y/r
+     rmom=(cons(2,igrid)*x+cons(3,igrid)*y)/r
      cons(2,igrid)=rmom
      cons(3,igrid)=angmom
 
     if(avg>0)then 
      angmom=x*cons_old(3,igrid)-y*cons_old(2,igrid)
-     rmom=cons_old(2,igrid)*x/r+cons_old(3,igrid)*y/r
+     rmom=(cons_old(2,igrid)*x+cons_old(3,igrid)*y)/r
      cons_old(2,igrid)=rmom
      cons_old(3,igrid)=angmom
     endif
@@ -211,10 +211,6 @@ subroutine flux_ang(avg)
                            areaxz*(fy(2,idim)-fy(1,idim))+&
                            areaxy*(fz(2,idim)-fz(1,idim)))*dt/vol
   enddo
-!  x=grid(igrid)%x
-!  y=grid(igrid)%y
-!  r=sqrt(x*x+y*y)
-!  fluxtmp(3,igrid)=fluxtmp(3,igrid)+p(igrid)*( x*y)/r*dt
  enddo
 !$OMP ENDDO 
 !$OMP BARRIER
@@ -256,20 +252,15 @@ endif
     r=sqrt(x*x+y*y)
     angmom=cons(3,igrid)
     rmom=cons(2,igrid)
-    cons(3,igrid)=(rmom*y*r+x*angmom)/r**2
-    cons(2,igrid)=(x*cons(3,igrid)-angmom)/y
-
-!     if(grid(igrid)%iy==ny/2)then
-!       print *, "CHECK ",x,y,z,rmom,angmom
-!     endif
-
+    cons(2,igrid) = (rmom*x - angmom*y/r)/r
+    cons(3,igrid) = (rmom*y + angmom*x/r)/r
 
 
     if(avg>0)then
-      angmom=cons_old(3,igrid)
-      rmom=cons_old(2,igrid)
-      cons_old(3,igrid)=(rmom*y*r+x*angmom)/r**2
-      cons_old(2,igrid)=(x*cons_old(3,igrid)-angmom)/y
+       angmom=cons_old(3,igrid)
+       rmom=cons_old(2,igrid)
+       cons_old(2,igrid) = (rmom*x - angmom*y/r)/r
+       cons_old(3,igrid) = (rmom*y + angmom*x/r)/r
     endif
  
  enddo
