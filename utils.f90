@@ -42,11 +42,7 @@ end function
 
    igrid=(iz-1)*nx*ny
    
-#ifdef FLUX_CYL_Y
-   iy=int((y/dy+three))
-#else
    iy=int((y+half*dy)/dy+dble(ny+1)*half)
-#endif
    if(iy<1)iy=1
    if(iy>ny)iy=ny
 
@@ -411,14 +407,14 @@ end function
          idim=1
          if(u(idim,idx)>zero)call zero_flow_dir(idx,idim)
        endif
-!       if(ix==nx-1.or.ix==nx)then   !positve x
-!         idim=1
-!         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
-!       endif
-!       if(iy==1.or.iy==2)then       !negative y
-!         idim=2
-!         if(u(idim,idx)>zero)call zero_flow_dir(idx,idim)
-!       endif
+       if(ix==nx-1.or.ix==nx)then   !positve x
+         idim=1
+         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
+       endif
+       if(iy==1.or.iy==2)then       !negative y
+         idim=2
+         if(u(idim,idx)>zero)call zero_flow_dir(idx,idim)
+       endif
        if(iy==ny.or.iy==ny-1)then    !positive y
          idim=2
          if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
@@ -427,10 +423,10 @@ end function
 !         idim=3
 !         if(u(idim,idx)>zero)call zero_flow_dir(idx,idim)
 !       endif
-       if(iz==nz.or.iz==nz-1)then    !positive z
-         idim=3
-         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
-       endif
+!       if(iz==nz.or.iz==nz-1)then    !positive z
+!         idim=3
+!         if(u(idim,idx)<zero)call zero_flow_dir(idx,idim)
+!       endif
 #endif /* end ifdef CONTROLVALVES */
 !! FINISH for control valve
 
@@ -498,6 +494,44 @@ end function
    endif
  end function
 !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Calculate cubic spline for softening potential.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ real(pre) function derivwspline3(x)
+  real(pre), intent(in)::x
+   if (x<one)then
+     derivwspline3= x*(3d0-2.25d0*x)
+   elseif (x<two) then
+     derivwspline3= 0.75*(two-x)**2
+   else
+     derivwspline3=zero
+   endif
+ end function
+!
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Calculate exponetial Plummer for softening potential.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ real(pre) function wexpplum(x)
+  real(pre), intent(in)::x
+  
+  wexpplum = x/(x+exp(-x))
+
+ end function
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Calculate derivative of exponetial Plummer for softening potential.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ real(pre) function derivwexpplum(x)
+  real(pre), intent(in)::x
+  
+  derivwexpplum = one/(x+exp(-x)) -x/(x+exp(-x))**2 * (one-exp(-x))
+
+ end function
+
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Calculate gravitational force from grid.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -977,6 +1011,7 @@ subroutine getBinaryPosition(tt,rBin,thetaBin,omegaBin, &
 !$OMP END MASTER
 
  end subroutine
+!
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Check how we are doing with conserving quantities when applicable. 

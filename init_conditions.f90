@@ -6,6 +6,7 @@ subroutine init_conditions()
  use parameters
  use derived_types
  use grid_commons
+ use utils, only: calc_gforce
  implicit none
 
  integer:: igrid
@@ -53,6 +54,9 @@ subroutine init_conditions()
 
  enddo
 !$OMP ENDDO
+
+ call calc_gforce() 
+
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,nbound
   cons(1,indx_bound(igrid))=small_rho

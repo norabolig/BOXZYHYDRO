@@ -120,7 +120,7 @@ module particle
   integer::ipart,id,iseed=314,istat,step,isize
   real(pre)::dphi,r,z,rpoly=12.,momx,momy,mass,afit,bfit,cfit,r_ran,theta_ran,phi_ran
   real(pre)::vcyl,vr,fexp,vz,vx,vy,x,y,m,soft,dtheta,theta,vt,a,ecc,phi_loc,h
-  real(pre)::m1=1.d-3,m2=1.d-3
+  real(pre)::m1=3d-5
 !
 !
 #ifdef WITHDRAG
@@ -920,9 +920,13 @@ endif
 !
  subroutine print_select_particles()
  integer::ipart
+ return
 !$OMP MASTER
- if(ntrace>0)then
-  do ipart=1,ntrace
+ if(npart_direct>0)then
+  do ipart=1,1!5!npart
+!   if (ipart==51) then
+!   if (ipart<=npart) then
+!
 !
 #ifdef THERMALHIST
       print "(A10,I6,1X,10(1pe16.8))", "PARTICLE:",ipart,time,part(ipart)%x,part(ipart)%y, &

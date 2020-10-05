@@ -49,6 +49,7 @@ module pdrag
   real(pre)::azimuth,dumeps,dumm,momx,momy,momz,vxn,vyn,vzn,weight
   real(pre)::vgx,vgy,vgz,delvx,delvy,delvz,cs,kn,dfx,dfy,dfz,vdrift,e0,e1
   real(pre)::delvx_new,delvy_new,delvz_new,ggam,alpha,exp_talpha,ts,tdrag
+  real(pre)::vcirc,r,dg0
   type(units)::scl
 
   integer::iter
@@ -60,6 +61,7 @@ module pdrag
   momx=zero
   momy=zero
   momz=zero
+  ggam=zero
   do iter=1,8
    dg =dg +cons(1,ig(iter))*w(iter)
    vgx=vgx+cons(2,ig(iter))*w(iter)
@@ -67,6 +69,7 @@ module pdrag
    vgz=vgz+cons(4,ig(iter))*w(iter)
    tg =tg +muc_array(ig(iter))*w(iter)
    pg =pg +p(ig(iter))*w(iter)
+   ggam=ggam+adindx(ig(iter))*w(iter)
   enddo
   momx=vgx+vx*d
   momy=vgy+vy*d
@@ -78,19 +81,28 @@ module pdrag
   delvx=vgx-vx
   delvy=vgy-vy
   delvz=vgz-vz
-  e0=half*( (vgx**2+vgy**2+vgz**2)*dg + (vx**2+vy**2+vz**2)*d )
-  call get_gamma_from_tk(dumeps,dg,tg,dumm,ggam)
   cs=sqrt(ggam*pg/dg)
-  kn=half*dumm*mp/scl%mass/(dg*pi*4.43d-43*asize) !4.44d-43->1d-16cm^2
+  e0=half*( (vgx**2+vgy**2+vgz**2)*dg + (vx**2+vy**2+vz**2)*d )
+
+  if (nz<6)then
+     vcirc = abs(x*vgy-y*vgx)/sqrt(x*x+y*y)
+     dg0=dg*vcirc/(two*cs*sqrt(x*x+y*y))
+     !print * , d,dg
+  else
+    dg0=dg
+  endif
+
+  call get_gamma_from_tk(dumeps,dg,tg,dumm,ggam)
+  kn=half*dumm*mp/scl%mass/(dg0*pi*4.43d-43*asize) !4.44d-43->1d-16cm^2
 
   if(tg<tg_immediate_couple.or.asize>=a_sublimate_limit)then
 
     call update_dv(delvx_new,delvx,kn, &
-                   cs,dg,rhoa,asize,t,alpha)
+                   cs,dg0,rhoa,asize,t,alpha)
     call update_dv(delvy_new,delvy,kn, &
-                   cs,dg,rhoa,asize,t,alpha)
+                   cs,dg0,rhoa,asize,t,alpha)
     call update_dv(delvz_new,delvz,kn, &
-                   cs,dg,rhoa,asize,t,alpha)
+                   cs,dg0,rhoa,asize,t,alpha)
 !
 !
 #ifdef TURN_ON_ONLY_FOR_DEBUGGING_PURPOSES

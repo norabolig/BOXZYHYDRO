@@ -7,7 +7,8 @@
 !    * gas-drag coupling, including feedback reactions
 !    * particle-in-cell + particle-particle N-body
 !  o flux linear or angular momentum 
-!  o arbitrary boundaries and grid structures for creating wind tunnels, etc.
+!  o Tadmore & Kalgnor fluxing with min-mod flux limiter
+!  o arbitrary boundaries for creating wind tunnels, etc.
 !
 program boxzyhydro
 !
@@ -25,9 +26,12 @@ program boxzyhydro
 #ifdef RADTRAN
  use mcrtfld
 #endif
+#ifdef COOL
+ use coolinglaws
+#endif
 !
 !
-#if defined SELFGRAVITY || defined EXTERNALPHI
+#if defined SELFGRAVITY || defined EXTERNALGRAV
  use selfgravity
 #endif
 !
@@ -42,7 +46,7 @@ program boxzyhydro
  integer::igrid,idim,step,idx,ibd,ipart
  real(pre)::angle,x,y,z,phian,r
  real(pre)::nextstop,f1,timer_start,timer_stop
- real(pre)::dtold
+ real(pre)::dtold,tphase
  real(pre)::saback,safron,satop,sabot,pback,pfron,ptop,pbot,rhoav,vxav,avcount,chord=150d0
  real(pre)::etot_loc,mass_loc
  real(pre)::etot_loc0,mass_loc0,eloss_tot,ediff,factor,f_loc,f_loc0
@@ -89,6 +93,7 @@ program boxzyhydro
 !$OMP END PARALLEL
 !
 !
+!
 #ifdef PARTICLE
  call initialize_particles() ! particles.f90
 #endif
@@ -129,7 +134,26 @@ program boxzyhydro
 !
 #else
 !
+#ifdef USEPOTENTIAL
  call get_pot_from_tree ! gravity.f90
+#else
+ call get_gravity_from_tree
+#endif
+!
+!$OMP PARALLEL DEFAULT(SHARED)
+#ifdef USEPOTENTIAL
+#ifdef NOHYDRO
+  if(npart>0.and.use_pic) call calc_gforce() ! gravity.f90
+#else
+  call calc_gforce()
+#endif
+#endif
+!
+#ifdef EXTERNALGRAV
+!$OMP BARRIER
+  call external_grav(tphase,0)
+#endif
+!$OMP ENDPARALLEL
 !
 !
 #ifdef VERBOSE
@@ -155,10 +179,6 @@ print *, "Got pot using expansion"
 !
 #endif /* endif SELFGRAVITY */
 !
-!
-#ifdef EXTERNALPHI
-  call external_phi() ! gravity.f90, user must alter routine appropriately.
-#endif
 !
 !
 #ifdef NOHYDRO
@@ -196,6 +216,7 @@ do
  etot_loc0=zero;mass_loc0=zero
  f_loc=zero;f_loc0=zero
  eloss_tot=zero
+
 !$OMP PARALLEL DEFAULT(SHARED) private(x,y,z,angle)                    
 #ifndef NOHYDRO
   call conservation_diagnostic() ! in utils.f90 xcom,ycom,zcom defined in utils
@@ -227,7 +248,7 @@ do
 #ifdef PARTICLE
 !
 !
- if(mod(step,nstep_print_part)==0)call print_select_particles() ! particle.f90
+ call print_select_particles() ! particle.f90
 !
 !
 #ifdef NOHYDRO /* If no hydro, limit the starting point for the timestep solver. */
@@ -265,7 +286,7 @@ do
 !***
 !
 !$OMP BARRIER
- call source() ! source.f90, apply forces
+ call source(time,0) ! source.f90, apply forces
 !$OMP BARRIER
 !
 #ifndef NOHYDRO
@@ -273,6 +294,10 @@ do
 !
 #ifdef RADTRAN
  call mcrtfld_transfer ! mcrtfld.f90
+!$OMP BARRIER
+#endif
+#ifdef COOL
+ call get_local_cooling(dt) ! coolinglaws
 !$OMP BARRIER
 #endif
 !$OMP MASTER
@@ -342,6 +367,7 @@ do
  else
     call flux(1)
  endif
+
 
 !$OMP PARALLEL DEFAULT(SHARED) 
 !
@@ -416,7 +442,11 @@ do
  call get_pot_bc_from_tree() ! gravity.f90
  call vcycle_pot() ! gravity.f90
 #else
+#ifdef USEPOTENTIAL
  call get_pot_from_tree() ! gravity.f90
+#else
+ call get_gravity_from_tree()
+#endif
 #endif /* endif FASTGRAVITY */
 !
 !
@@ -433,9 +463,6 @@ do
 #endif /* endif SELFGRAVITY */
 !
 !
-#ifdef EXTERNALPHI
-  call external_phi() ! gravity.f90
-#endif
 !
 !***
 ! Full source and gravity updates complete. Final half source.
@@ -447,7 +474,20 @@ do
 !$OMP PARALLEL DEFAULT(SHARED) 
 !
 !
- call source() ! source.f90
+#ifdef USEPOTENTIAL
+#ifdef NOHYDRO
+  if(npart>0.and.use_pic) call calc_gforce() ! gravity.f90
+#else
+  call calc_gforce()
+#endif
+#endif
+ tphase=time+dt
+#ifdef EXTERNALGRAV
+!$OMP BARRIER
+  call external_grav(tphase,1)
+#endif
+
+ call source(tphase,1) ! source.f90
 !
 !
 #ifndef NOHYDRO
@@ -455,6 +495,9 @@ do
 !
 #ifdef RADTRAN
  call mcrtfld_transfer() ! mcrtfld.f90
+#endif
+#ifdef COOL
+ call get_local_cooling(dt)
 #endif
 !$OMP MASTER
 #ifdef MCFLDRT

@@ -9,13 +9,32 @@ subroutine read_hydro()
  implicit none
 
  integer:: igrid,ibd,step
- real(pre)::x,y,z,eps,tk
- character::junk*25,cindx*8,filename*80
+ real(pre)::x,y,z,eps,tk,rho,hscale,ekin,ploc
+ character::cindx*8,filename*80
  type(units)::scl_read
+ 
+#ifdef DOUBLEGRID
+ integer:: ngridin,nxin,nyin,nzin,jgrid,in,ix,iy
+ real(pre),dimension(:),allocatable::pin,phiin,muc_arrayin
+ real(pre),dimension(:,:),allocatable::consin,uin
+#endif
  
 !$OMP MASTER
  write(cindx,'(I8.8)')irestart
  filename="celldump."//cindx
+ 
+#ifdef DOUBLEGRID
+ nxin=1600
+ nyin=1600
+ nzin=1
+ ngridin=nxin*nyin*nzin
+ allocate(pin(ngridin))
+ allocate(phiin(ngridin))
+ allocate(muc_arrayin(ngridin))
+ allocate(consin(2,ngridin))
+ allocate(uin(3,ngridin))
+#endif
+ 
 !
  print *, "RESTART FILE ",filename
 !
@@ -24,51 +43,83 @@ subroutine read_hydro()
 ! This is good for very small runs and tests.
 !***
 !
-if(write_ascii)then
+#ifdef DOUBLEGRID
 !
-!
- open(unit=100,file=filename)
- read(100,'(A25,1pe16.8E3,I8)')junk,time,step
- starttime=time
- read(100,'(A1)')Junk
- igrid=1
-!
-!
-#if OLDREAD
- do while(igrid<=ngrid)
-      read(100,'(9(1pe16.8E3,1X),I2)'),x,y,z,&
-         cons(1,igrid),p(igrid),&
-         u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),ibd
-      if (abs(z)>dz*dble(nz-1)*half)cycle
-      igrid=igrid+1
- enddo
-else
  open(unit=100,file=filename,form="UNFORMATTED")
  read(100)step
  read(100)time,step
  starttime=time
  read(100)scl_read
  igrid=1
- do while(igrid<=ngrid)
-      read(100),x,y,z,&
-         cons(1,igrid),p(igrid),&
-         u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),ibd
-      !if (abs(z)>dz*dble(nz-1)*half)cycle
+ do while(igrid<=ngridin)
+      read(100)x,y,z,&
+         consin(1,igrid),pin(igrid),&
+        uin(1,igrid),uin(2,igrid),uin(3,igrid),phiin(igrid),consin(2,igrid),muc_arrayin(igrid),ibd
       igrid=igrid+1
  enddo
-!
+
+ do iy = 1,nyin
+   do ix = 1,nxin
+
+     in = nxin*(iy-1) + ix
+
+     jgrid = nx*( (iy-1)*2 ) + (ix-1)*2 + 1
+
+     cons(1,jgrid)=consin(1,in)
+     cons(5,jgrid)=consin(2,in)
+     u(1,jgrid)=uin(1,in)
+     u(2,jgrid)=uin(2,in)
+     u(3,jgrid)=uin(3,in)
+     phi(jgrid)=phiin(in)
+     muc_array(jgrid)=muc_arrayin(in)
+     p(jgrid)=pin(in)
+
+     jgrid = nx*( (iy-1)*2 ) + 1 + (ix-1)*2 + 1
+
+     cons(1,jgrid)=consin(1,in)
+     cons(5,jgrid)=consin(2,in)
+     u(1,jgrid)=uin(1,in)
+     u(2,jgrid)=uin(2,in)
+     u(3,jgrid)=uin(3,in)
+     phi(jgrid)=phiin(in)
+     muc_array(jgrid)=muc_arrayin(in)
+     p(jgrid)=pin(in)
+
+
+     jgrid = nx*( (iy)*2-1 ) + (ix-1)*2 +1
+
+     cons(1,jgrid)=consin(1,in)
+     cons(5,jgrid)=consin(2,in)
+     u(1,jgrid)=uin(1,in)
+     u(2,jgrid)=uin(2,in)
+     u(3,jgrid)=uin(3,in)
+     phi(jgrid)=phiin(in)
+     muc_array(jgrid)=muc_arrayin(in)
+     p(jgrid)=pin(in)
+
+
+     jgrid = nx*( (iy)*2-1 ) + (ix-1)*2+1 +1
+
+     cons(1,jgrid)=consin(1,in)
+     cons(5,jgrid)=consin(2,in)
+     u(1,jgrid)=uin(1,in)
+     u(2,jgrid)=uin(2,in)
+     u(3,jgrid)=uin(3,in)
+     phi(jgrid)=phiin(in)
+     muc_array(jgrid)=muc_arrayin(in)
+     p(jgrid)=pin(in)
+
+!     print* ,jgrid,in,ngrid,ngridin 
+ enddo
+ enddo
+
+ deallocate(consin,phiin,pin,uin,muc_arrayin)
+
 !
 #else
 !
+
 !
- do while(igrid<=ngrid)
-      read(100,'(9(1pe16.8E3,1X),I2)'),x,y,z,&
-         cons(1,igrid),p(igrid),&
-         u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),cons(5,igrid),muc_array(igrid),ibd
-      if (abs(z)>dz*dble(nz-1)*half)cycle
-      igrid=igrid+1
- enddo
-else
  open(unit=100,file=filename,form="UNFORMATTED")
  read(100)step
  read(100)time,step
@@ -76,23 +127,14 @@ else
  read(100)scl_read
  igrid=1
  do while(igrid<=ngrid)
-      read(100),x,y,z,&
+      read(100)x,y,z,&
          cons(1,igrid),p(igrid),&
         u(1,igrid),u(2,igrid),u(3,igrid),phi(igrid),cons(5,igrid),muc_array(igrid),ibd
-      !if (abs(z)>dz*dble(nz-1)*half)cycle
-      !cons(1,igrid)=cons(1,igrid)*(one+0.1*(one-two*rand())) 
-      !u(1,igrid)=u(1,igrid)+0.01d0*(one-two*rand())
-      !u(2,igrid)=u(2,igrid)+0.01d0*(one-two*rand())
-      !u(3,igrid)=u(3,igrid)+0.01d0*(one-two*rand())
-      !cons(1,igrid)=cons(1,igrid)*(one+(one-two*rand())*0.25)
       igrid=igrid+1
  enddo
+#endif
 !
 !
-#endif /* end ifdef OLDREAD. WIll be removed soon. */
-!
-!
-endif
 !
  close(100)
 !
@@ -106,38 +148,27 @@ endif
 !***
 !
 
-!$OMP DO SCHEDULE(STATIC) PRIVATE(x,y,z,tk,eps) 
+!$OMP DO SCHEDULE(STATIC) PRIVATE(x,y,z,rho,tk,hscale,eps,ekin,ploc) 
  do igrid=1,ngrid
 !
 !
-#if OLDREAD
-  tk=p(igrid)/scl%rgas/cons(1,igrid)*muc
-  call get_gamma_from_tk(eps,cons(1,igrid),tk,muc_array(igrid),adindx(igrid))
-   x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
-   if(x**2+y**2+z**2<dx**2+dy**2+dz**2)then
-      print *, "IC Central ",cons(1,igrid),p(igrid), &
-           muc_array(igrid),adindx(igrid),eps,&
-           p(igrid)*muc_array(igrid)/scl_read%rgas/cons(1,igrid),scl_read%rgas
-   endif
   cons(2,igrid)=u(1,igrid)*cons(1,igrid)
   cons(3,igrid)=u(2,igrid)*cons(1,igrid)
   cons(4,igrid)=u(3,igrid)*cons(1,igrid)
-  cons(5,igrid)=eps+half*cons(1,igrid)*(u(1,igrid)**2+u(2,igrid)**2+u(3,igrid)**2)
-!
-!
-#else
-!
-!
-  cons(2,igrid)=u(1,igrid)*cons(1,igrid)
-  cons(3,igrid)=u(2,igrid)*cons(1,igrid)
-  cons(4,igrid)=u(3,igrid)*cons(1,igrid)
-!
-!
-#endif /* end ifdef OLDREAD. Will be removed. */
+  adindx(igrid)=gammafix ! temporary re-initialization.  
+
+#ifdef RESETENG
+  if(igrid==1)print *,"Resetting ENG in read"
+  eps = p(igrid)/(gammafix-one)
+  cons(5,igrid) = eps + half*cons(1,igrid)*( u(1,igrid)**2 + u(2,igrid)**2 + u(3,igrid)**2 )
+#endif
+
 !
 !
  enddo
 !$OMP ENDDO
+
+
 !
 !$OMP DO SCHEDULE(STATIC)
  do igrid=1,nbound

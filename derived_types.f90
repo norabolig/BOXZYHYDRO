@@ -23,6 +23,7 @@ module derived_types
   integer::id
   integer,dimension(8)::ichild
   real(pre)::x,y,z,xcm,ycm,zcm,mass,rmax
+  real(pre)::Qxx,Qxy,Qyy,Qyz,Qzx,Qzz
   real(pre)::rho,phi
   logical::boundary
  end type

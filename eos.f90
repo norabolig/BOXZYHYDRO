@@ -1,4 +1,4 @@
-! Written by Nora Bolig (updated 19 Nov 2010)
+
 ! See Pathria for questions.  This uses E=NkT^2 d ln Z /d T to calculate internal energies.
 ! However, the zero point energies are subtracted out (relevant for orthohydrogen
 ! and for the vibrational states).  The 16.78 in the metals

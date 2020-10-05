@@ -14,7 +14,7 @@ module selfgravity
 
  type(gravcell),dimension(:),allocatable,save::grav_grid
  real(pre),dimension(:),allocatable,save::gdy,gdx,gdz,gravrho
- real(pre)::mbox,xcom_grid,ycom_grid,zcom_grid
+ real(pre)::mbox,xcom_grid,ycom_grid,zcom_grid,xcomO,ycomO,zcomO
  real(pre)::abin=20.,ebin=0.0d0,mbin=1d0
  integer,dimension(:),allocatable,save::gny,gnx,gnz,ngrav_grid,grav_bound_indx,ngrav_bound
  integer,save::nchild=8,nlevel=6,nmulti=1
@@ -273,7 +273,7 @@ subroutine init_grav_grid
 !
  subroutine set_com_in_tree
   real(pre)::x,y,z,mass,xcm,ycm,zcm,mtot_loc,mnode
-  real(pre)::rmax
+  real(pre)::rmax,r,Qxy,Qyz,Qzx,Qxx,Qyy,Qzz
   integer::ilevel,iskip,inode,ichild,indx
 
   ilevel=1
@@ -297,13 +297,31 @@ subroutine init_grav_grid
     ycom_grid=ycom_grid+ycm
     zcom_grid=zcom_grid+zcm
     if(mnode==zero)cycle
+
     xcm=xcm/mnode;ycm=ycm/mnode;zcm=zcm/mnode
     rmax=zero
+    Qxx=zero
+    Qyy=zero
+    Qzz=zero
+    Qxy=zero
+    Qyz=zero
+    Qzx=zero
+ 
     do ichild=1,nchild
      indx=grav_grid(inode+iskip)%ichild(ichild)
      if(indx==0)exit
      x=grid(indx)%x;y=grid(indx)%y;z=grid(indx)%z
-     rmax=max(rmax,sqrt( (x-xcm)**2+(y-ycm)**2+(z-zcm)**2))
+     r=sqrt( (x-xcm)**2+(y-ycm)**2+(z-zcm)**2 )
+     rmax=max(rmax,r)
+
+     mass=rhotot(indx)*dx*dy*dz
+     Qxx = Qxx + (3*(x-xcm)**2 - r*r)*mass
+     Qyy = Qyy + (3*(y-ycm)**2 - r*r)*mass
+     Qzz = Qzz + (3*(z-zcm)**2 - r*r)*mass
+     Qxy = Qxy + (3*(x-xcm)*(y-ycm))*mass
+     Qyz = Qyz + (3*(y-ycm)*(z-zcm))*mass
+     Qzx = Qzx + (3*(z-zcm)*(x-xcm))*mass
+
     enddo
     mtot_loc=mtot_loc+mnode
     grav_grid(inode+iskip)%xcm=xcm
@@ -311,6 +329,12 @@ subroutine init_grav_grid
     grav_grid(inode+iskip)%zcm=zcm
     grav_grid(inode+iskip)%mass=mnode
     grav_grid(inode+iskip)%rmax=rmax
+    grav_grid(inode+iskip)%Qxx=Qxx
+    grav_grid(inode+iskip)%Qyy=Qyy
+    grav_grid(inode+iskip)%Qzz=Qzz
+    grav_grid(inode+iskip)%Qxy=Qxy
+    grav_grid(inode+iskip)%Qyz=Qyz
+    grav_grid(inode+iskip)%Qzx=Qzx
   enddo
 !
 !***
@@ -349,17 +373,40 @@ subroutine init_grav_grid
      if(mnode==zero)cycle
      xcm=xcm/mnode;ycm=ycm/mnode;zcm=zcm/mnode
      rmax=zero
+     Qxx=zero
+     Qyy=zero
+     Qzz=zero
+     Qxy=zero
+     Qyz=zero
+     Qzx=zero
      do ichild=1,nchild
       indx=grav_grid(inode+iskip)%ichild(ichild)
       if(indx==0)cycle
       x=grav_grid(indx)%xcm;y=grav_grid(indx)%ycm;z=grav_grid(indx)%zcm
-      rmax=max(rmax,sqrt( (x-xcm)**2+(y-ycm)**2+(z-zcm)**2))
+
+      r=sqrt( (x-xcm)**2+(y-ycm)**2+(z-zcm)**2 )
+      rmax=max(rmax,r)
+
+      mass=grav_grid(indx)%mass
+      Qxx = Qxx + (3*(x-xcm)**2 - r*r)*mass
+      Qyy = Qyy + (3*(y-ycm)**2 - r*r)*mass
+      Qzz = Qzz + (3*(z-zcm)**2 - r*r)*mass
+      Qxy = Qxy + (3*(x-xcm)*(y-ycm))*mass
+      Qyz = Qyz + (3*(y-ycm)*(z-zcm))*mass
+      Qzx = Qzx + (3*(z-zcm)*(x-xcm))*mass
+
      enddo
      grav_grid(inode+iskip)%xcm=xcm
      grav_grid(inode+iskip)%ycm=ycm
      grav_grid(inode+iskip)%zcm=zcm
      grav_grid(inode+iskip)%mass=mnode
      grav_grid(inode+iskip)%rmax=rmax
+     grav_grid(inode+iskip)%Qxx=Qxx
+     grav_grid(inode+iskip)%Qyy=Qyy
+     grav_grid(inode+iskip)%Qzz=Qzz
+     grav_grid(inode+iskip)%Qxy=Qxy
+     grav_grid(inode+iskip)%Qyz=Qyz
+     grav_grid(inode+iskip)%Qzx=Qzx
      mtot_loc=mtot_loc+mnode
    enddo
    iskip=iskip+ngrav_grid(ilevel)
@@ -377,15 +424,30 @@ end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 subroutine get_pot_from_tree
-  integer::igrid,ilevel,indx,l,flag,inode,iskip
+  integer::igrid,ilevel,indx,l,flag,inode,iskip,square
   real(pre)::x,y,z,xx,yy,zz,r,phi_loc,theta
+
+  square=0
+  if(nz>1)then
+    if (dx==dy .and. dy==dz)square=1
+  else
+    if (dx==dy) square=1
+  endif
 
 !$OMP PARALLEL DEFAULT(SHARED) &
 !$OMP&PRIVATE(igrid,ilevel,indx,l,flag,inode,iskip)&
 !$OMP&PRIVATE(x,y,z,xx,yy,zz,r,phi_loc,theta)
 !$OMP DO SCHEDULE(dynamic)
   do igrid=1,ngrid
-   phi_loc=zero
+   if(square==1)then
+     if (nz>1)then
+        phi_loc=-2.38d0*cons(1,igrid)*dx*dy  ! dz cancels with dx=dy=dz
+     else
+        phi_loc=-3.525494d0*cons(1,igrid)*dx ! dy cancels with dx=dy
+     endif
+   else
+     phi_loc=zero
+   endif
    x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
    iskip=0
    do ilevel=1,nlevel-1
@@ -398,14 +460,25 @@ subroutine get_pot_from_tree
     r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
     flag=0
     if(r>zero)then
-     theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     if (nz>1)then
+        theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     else
+        theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     endif    
      if(theta>thetaopen)flag=1
     else
      flag=1
     endif
     if(flag==0)then
       !print *, "Flag level, ",nlevel
-      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
+      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r  - half/r**5 * &
+               ( (x-xx)**2*grav_grid(inode+iskip)%Qxx + &
+                 (y-yy)**2*grav_grid(inode+iskip)%Qyy + &
+                 (z-zz)**2*grav_grid(inode+iskip)%Qzz + &
+                 2*(x-xx)*(y-yy)*grav_grid(inode+iskip)%Qxy + &
+                 2*(y-yy)*(z-zz)*grav_grid(inode+iskip)%Qyz + &
+                 2*(z-zz)*(x-xx)*grav_grid(inode+iskip)%Qzx )
+        
     else
       indx=inode+iskip !grav_grid(inode)%id
       l=ilevel
@@ -445,13 +518,23 @@ subroutine get_pot_bc_from_tree
     r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
     flag=0
     if(r>zero)then
-     theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     if (nz>1)then
+         theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     else
+         theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     endif    
      if(theta>thetaopen)flag=1
     else
      flag=1
     endif
     if(flag==0)then
-      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
+      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r  - half/r**5 * &
+               ( (x-xx)**2*grav_grid(inode+iskip)%Qxx + &
+                 (y-yy)**2*grav_grid(inode+iskip)%Qyy + &
+                 (z-zz)**2*grav_grid(inode+iskip)%Qzz + &
+                 2*(x-xx)*(y-yy)*grav_grid(inode+iskip)%Qxy + &
+                 2*(y-yy)*(z-zz)*grav_grid(inode+iskip)%Qyz + &
+                 2*(z-zz)*(x-xx)*grav_grid(inode+iskip)%Qzx )
     else
       indx=inode+iskip !grav_grid(inode)%id
       l=ilevel
@@ -528,13 +611,24 @@ subroutine get_pot_at_higher_level(mlevel)
     r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
     flag=0
     if(r>zero)then
-     theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     if (nz>1)then
+         theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     else
+         theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     endif    
      if(theta>thetaopen)flag=1
     else
      flag=1
     endif
     if(flag==0)then
-      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
+      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r  - half/r**5 * &
+               ( (x-xx)**2*grav_grid(inode+iskip)%Qxx + &
+                 (y-yy)**2*grav_grid(inode+iskip)%Qyy + &
+                 (z-zz)**2*grav_grid(inode+iskip)%Qzz + &
+                 2*(x-xx)*(y-yy)*grav_grid(inode+iskip)%Qxy + &
+                 2*(y-yy)*(z-zz)*grav_grid(inode+iskip)%Qyz + &
+                 2*(z-zz)*(x-xx)*grav_grid(inode+iskip)%Qzx )
+ 
     else
       indx=inode+iskip !grav_grid(inode)%id
       l=ilevel
@@ -579,14 +673,26 @@ subroutine get_pot_bc_at_higher_level(mlevel)
     r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
     flag=0
     if(r>zero)then
-     theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     if (nz>1)then
+         theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     else
+         theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     endif    
      if(theta>thetaopen)flag=1
     else
      flag=1
     endif
     if(flag==0)then
-      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r !- &
+      phi_loc=phi_loc-grav_grid(inode+iskip)%mass/r  - half/r**5 * &
+               ( (x-xx)**2*grav_grid(inode+iskip)%Qxx + &
+                 (y-yy)**2*grav_grid(inode+iskip)%Qyy + &
+                 (z-zz)**2*grav_grid(inode+iskip)%Qzz + &
+                 2*(x-xx)*(y-yy)*grav_grid(inode+iskip)%Qxy + &
+                 2*(y-yy)*(z-zz)*grav_grid(inode+iskip)%Qyz + &
+                 2*(z-zz)*(x-xx)*grav_grid(inode+iskip)%Qzx )
+ 
     else
+
       indx=inode+iskip !grav_grid(inode)%id
       l=ilevel
       call gather_pot(phi_loc,x,y,z,indx,l,mlevel)
@@ -618,13 +724,23 @@ recursive subroutine gather_pot(phi_loc,x,y,z,id,ilevel,level_limit)
    r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
    flag=0
    if(r>zero)then
-    theta = sqrt(gdx(ilm)**2+gdy(ilm)**2+gdz(ilm)**2)/r!grav_grid(indx)%rmax/r
+     if (nz>1)then
+         theta = sqrt(gdx(ilm)**2+gdy(ilm)**2+gdz(ilm)**2)/r !grav_grid(inode+iskip)%rmax/r
+     else
+         theta = sqrt(gdx(ilm)**2+gdy(ilm)**2)/r !grav_grid(inode+iskip)%rmax/r
+     endif    
     if(theta>thetaopen.and.ilevel>level_limit)flag=1
    else
     flag=1
    endif
    if(flag==0)then
-     phi_loc=phi_loc-grav_grid(indx)%mass/r     !- &
+     phi_loc=phi_loc-grav_grid(indx)%mass/r  -half/r**5 * &
+               ( (x-xx)**2*grav_grid(indx)%Qxx + &
+                 (y-yy)**2*grav_grid(indx)%Qyy + &
+                 (z-zz)**2*grav_grid(indx)%Qzz + &
+                 2*(x-xx)*(y-yy)*grav_grid(indx)%Qxy + &
+                 2*(y-yy)*(z-zz)*grav_grid(indx)%Qyz + &
+                 2*(z-zz)*(x-xx)*grav_grid(indx)%Qzx )
    else
      new_indx=indx!grav_grid(indx)%id
      call gather_pot(phi_loc,x,y,z,new_indx,ilm,level_limit)
@@ -645,6 +761,194 @@ recursive subroutine gather_pot(phi_loc,x,y,z,id,ilevel,level_limit)
 
   endif
 end subroutine
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Get gravity from tree only. This solves for the gravity everywhere
+! using a tree. The dipole moment is included because we use the COM of
+! each mode.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!
+subroutine get_gravity_from_tree
+  integer::igrid,ilevel,indx,l,flag,inode,iskip,square
+  real(pre)::x,y,z,xx,yy,zz,r,g_loc(3),theta,quad
+  real(pre)::xhat,yhat,zhat
+
+!$OMP PARALLEL DEFAULT(SHARED) &
+!$OMP&PRIVATE(igrid,ilevel,indx,l,flag,inode,iskip)&
+!$OMP&PRIVATE(x,y,z,xx,yy,zz,r,g_loc,theta,quad,xhat,yhat,zhat)
+!$OMP DO SCHEDULE(dynamic)
+  do igrid=1,ngrid
+   g_loc=zero
+   x=grid(igrid)%x;y=grid(igrid)%y;z=grid(igrid)%z
+   iskip=0
+   do ilevel=1,nlevel-1
+     iskip=iskip+ngrav_grid(ilevel)
+   enddo
+   ilevel=nlevel
+   do inode=1,ngrav_grid(ilevel)
+    if(.not.(grav_grid(inode+iskip)%mass>zero))cycle
+    xx=grav_grid(inode+iskip)%xcm;yy=grav_grid(inode+iskip)%ycm;zz=grav_grid(inode+iskip)%zcm
+    r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
+    flag=0
+    if(r>zero)then
+     if (nz>1)then
+        theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2+gdz(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     else
+        theta = sqrt(gdx(ilevel)**2+gdy(ilevel)**2)/r !grav_grid(inode+iskip)%rmax/r
+     endif    
+     if(theta>thetaopen)flag=1
+    else
+     flag=1
+    endif
+    if(flag==0)then
+
+      xhat = (x-xx)/r
+      yhat = (y-yy)/r
+      zhat = (z-zz)/r
+
+      quad = xhat**2*grav_grid(inode+iskip)%Qxx + &
+             yhat**2*grav_grid(inode+iskip)%Qyy + &
+             zhat**2*grav_grid(inode+iskip)%Qzz + &
+             two*xhat*yhat*grav_grid(inode+iskip)%Qxy + &
+             two*yhat*zhat*grav_grid(inode+iskip)%Qyz + &
+             two*zhat*xhat*grav_grid(inode+iskip)%Qzx 
+
+      g_loc(1)=g_loc(1) &
+              -  (   grav_grid(inode+iskip)%mass*xhat   &
+                 + ( - (xhat*grav_grid(inode+iskip)%Qxx + &
+                        yhat*grav_grid(inode+iskip)%Qxy + &
+                        zhat*grav_grid(inode+iskip)%Qzx ) &
+                     + 2.5d0*quad*xhat &
+                   )/r**2  &
+                 )/r**2
+
+      g_loc(2)=g_loc(2) &
+              -  (   grav_grid(inode+iskip)%mass*yhat   &
+                 + ( - (xhat*grav_grid(inode+iskip)%Qxy + &
+                        yhat*grav_grid(inode+iskip)%Qyy + &
+                        zhat*grav_grid(inode+iskip)%Qyz ) &
+                     + 2.5d0*quad*yhat &
+                   )/r**2  &
+                 )/r**2
+
+      g_loc(3)=g_loc(3) &
+               -  (   grav_grid(inode+iskip)%mass*zhat   &
+                 + ( - (xhat*grav_grid(inode+iskip)%Qzx + &
+                        yhat*grav_grid(inode+iskip)%Qyz + &
+                        zhat*grav_grid(inode+iskip)%Qzz ) &
+                     + 2.5d0*quad*zhat &
+                   )/r**2  &
+                 )/r**2
+
+    else
+      indx=inode+iskip !grav_grid(inode)%id
+      l=ilevel
+      call gather_gravity(g_loc,x,y,z,indx,l,1) ! work horse of the function.
+    endif
+   enddo
+   gforce(1,igrid)=g_loc(1)
+   gforce(2,igrid)=g_loc(2)
+   gforce(3,igrid)=g_loc(3)
+ enddo
+!$OMP ENDDO
+!$OMP END PARALLEL
+end subroutine
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Main work horse for getting the gravity via a tree. This is the
+! walking function.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+recursive subroutine gather_gravity(g_loc,x,y,z,id,ilevel,level_limit)
+  real(pre)::g_loc(3),x,y,z,xx,yy,zz,theta,r,quad,xhat,yhat,zhat
+  integer::id,ilevel,flag,ilm,new_indx,ichild,indx,level_limit
+  ilm=ilevel-1
+
+  if(ilevel>1)then
+
+  do ichild=1,nchild
+   indx=grav_grid(id)%ichild(ichild)
+   if(indx==0)exit
+   xx=grav_grid(indx)%xcm;yy=grav_grid(indx)%ycm;zz=grav_grid(indx)%zcm
+   r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2)
+   flag=0
+   if(r>zero)then
+     if (nz>1)then
+         theta = sqrt(gdx(ilm)**2+gdy(ilm)**2+gdz(ilm)**2)/r !grav_grid(inode+iskip)%rmax/r
+     else
+         theta = sqrt(gdx(ilm)**2+gdy(ilm)**2)/r !grav_grid(inode+iskip)%rmax/r
+     endif    
+    if(theta>thetaopen.and.ilevel>level_limit)flag=1
+   else
+    flag=1
+   endif
+   if(flag==0)then
+
+      xhat = (x-xx)/r
+      yhat = (y-yy)/r
+      zhat = (z-zz)/r
+
+      quad = xhat**2*grav_grid(indx)%Qxx + &
+             yhat**2*grav_grid(indx)%Qyy + &
+             zhat**2*grav_grid(indx)%Qzz + &
+             two*xhat*yhat*grav_grid(indx)%Qxy + &
+             two*yhat*zhat*grav_grid(indx)%Qyz + &
+             two*zhat*xhat*grav_grid(indx)%Qzx 
+
+      g_loc(1)=g_loc(1) &
+              - ( grav_grid(indx)%mass*xhat       &
+                +( - ( xhat*grav_grid(indx)%Qxx + &
+                       yhat*grav_grid(indx)%Qxy + &
+                       zhat*grav_grid(indx)%Qzx   &
+                     )                            &
+                   + 2.5d0*quad*xhat              &
+                 )/r**2                           &
+                )/r**2
+
+      g_loc(2)=g_loc(2) &
+              - ( grav_grid(indx)%mass*yhat       &
+                +( - ( xhat*grav_grid(indx)%Qxy + &
+                       yhat*grav_grid(indx)%Qyy + &
+                       zhat*grav_grid(indx)%Qyz   &
+                     )                            &
+                   + 2.5d0*quad*yhat              &
+                 )/r**2                           &
+                )/r**2
+
+      g_loc(3)=g_loc(3) &
+              - ( grav_grid(indx)%mass*zhat       &
+                +( - ( xhat*grav_grid(indx)%Qzx + &
+                       yhat*grav_grid(indx)%Qyz + &
+                       zhat*grav_grid(indx)%Qzz   &
+                     )                            &
+                   + 2.5d0*quad*zhat              &
+                 )/r**2                           &
+                )/r**2
+
+   else
+     new_indx=indx!grav_grid(indx)%id
+     call gather_gravity(g_loc,x,y,z,new_indx,ilm,level_limit)
+   endif
+  enddo
+   
+  else
+
+  do ichild=1,nchild
+    indx=grav_grid(id)%ichild(ichild)
+    if(indx==0)exit
+    xx=grid(indx)%x;yy=grid(indx)%y;zz=grid(indx)%z
+    r=sqrt( (x-xx)**2+(y-yy)**2+(z-zz)**2 )
+    if(r>zero)then
+     g_loc(1)=g_loc(1)-rhotot(indx)*dx*dy*dz*(x-xx)/r**3
+     g_loc(2)=g_loc(2)-rhotot(indx)*dx*dy*dz*(y-yy)/r**3
+     g_loc(3)=g_loc(3)-rhotot(indx)*dx*dy*dz*(z-zz)/r**3
+    endif
+  enddo
+
+  endif
+end subroutine
+!
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Find the gravity grid boundaries at level ilevel.
@@ -1109,11 +1413,11 @@ end function
 ! Roche potential.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
- subroutine external_phi(tphase)! simple Roche potential
+ subroutine external_phi(tphase,printcom)! simple Roche potential
   use utils, only: wspline3
-  integer::igrid
-  real(pre)::x,y,z,xobj,yobj,zobj,xmass,zmass,ymass,tphase
-  real(pre)::h1
+  integer::igrid,printcom,jgrid
+  real(pre)::x,y,z,xobj,yobj,zobj,xmass,zmass,ymass,tphase,xj,yj
+  real(pre)::h1,phitest
   real(pre)::r
 !!! Note: This is for a 2D simulation
 
@@ -1121,16 +1425,17 @@ end function
   ymass=zero
   zmass=zero
 
-!$OMP PARALLEL DEFAULT(PRIVATE) REDUCTION(+:xmass,ymass,zmass)
+!$OMP PARALLEL SHARED(ngrid,cons,grid,dx,dy,dz) &
+!$OMP& DEFAULT(PRIVATE) REDUCTION(+:xmass,ymass,zmass)
 !$OMP DO SCHEDULE(STATIC)
    do igrid=1,ngrid
       x=grid(igrid)%x
       y=grid(igrid)%y
       z=grid(igrid)%z
 
-      xmass= xmass+x*cons(1,igrid)
-      ymass= ymass+y*cons(1,igrid)
-      zmass= zmass+z*cons(1,igrid)
+      xmass= xmass+x*cons(1,igrid)*dx*dy*dz
+      ymass= ymass+y*cons(1,igrid)*dx*dy*dz
+      zmass= zmass+z*cons(1,igrid)*dx*dy*dz
 
    enddo
 !$OMP ENDDO
@@ -1141,19 +1446,111 @@ end function
   zobj = -zmass/object_mass
 
 !$OMP PARALLEL DEFAULT(PRIVATE)  &
-!$OMP& SHARED(grid,phi,ngrid,object_mass,object_radius,xobj,yobj)
+!$OMP& SHARED(grid,phi,ngrid,object_mass,object_radius,xobj,yobj,dx,dy)&
+!$OMP& SHARED(cons)
+
 !$OMP DO SCHEDULE(STATIC)
   do igrid=1,ngrid
     x=grid(igrid)%x-xobj
     y=grid(igrid)%y-yobj
     r=sqrt(x*x+y*y)
+
     h1=r/object_radius
     phi(igrid)=phi(igrid)-object_mass/r*wspline3(h1) 
   enddo
 !$OMP END DO
 !$OMP END PARALLEL
+
+  if (printcom==1) print *,"STAR ",tphase,xobj,yobj,zobj
  
  end subroutine
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Add an external gravity field. The default below is for a 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+ subroutine external_grav(tphase,printcom)! simple Roche potential
+  use utils, only: wspline3,derivwspline3
+  integer::igrid,printcom,jgrid
+  real(pre)::x,y,z,xobj,yobj,zobj,tphase,gfx,gfy,phitest
+  real(pre)::h1
+  real(pre)::r
+!!! Note: This is for a 2D simulation
+
+!$OMP MASTER
+  xcomO=zero
+  ycomO=zero
+  zcomO=zero
+!$OMP ENDMASTER
+!$OMP BARRIER
+
+!$OMP DO SCHEDULE(STATIC) REDUCTION(+:xcomO,ycomO,zcomO)
+   do igrid=1,ngrid
+      x=grid(igrid)%x
+      y=grid(igrid)%y
+      z=grid(igrid)%z
+
+      xcomO= xcomO+x*cons(1,igrid)*dx*dy*dz
+      ycomO= ycomO+y*cons(1,igrid)*dx*dy*dz
+      zcomO= zcomO+z*cons(1,igrid)*dx*dy*dz
+
+   enddo
+!$OMP ENDDO
+   
+  xobj = -xcomO/object_mass
+  yobj = -ycomO/object_mass
+  zobj = -zcomO/object_mass
+
+!$OMP DO SCHEDULE(STATIC)
+  do igrid=1,ngrid
+    x=grid(igrid)%x-xobj
+    y=grid(igrid)%y-yobj
+    r=sqrt(x*x+y*y)
+
+!    if(grid(igrid)%iy==786)then
+!       phitest=zero
+!       do jgrid=1,ngrid
+!          if (jgrid==igrid)then
+!              phitest = phitest -3.525494d0*cons(1,jgrid)*dx
+!          else
+!              phitest = phitest - cons(1,jgrid)*dx*dy/sqrt( (grid(igrid)%x-grid(jgrid)%x)**2 + (grid(igrid)%y-grid(jgrid)%y)**2)
+!          endif
+!       enddo
+!       print *, "PHITEST", phi(igrid),phitest,grid(igrid)%x,grid(igrid)%y
+!    endif
+!    if(grid(igrid)%iy==786)then
+!       gfx=zero
+!       gfy=zero
+!       do jgrid=1,ngrid
+!          if (jgrid==igrid)cycle
+!          gfx = gfx + cons(1,jgrid)*dx*dy*(grid(jgrid)%x-grid(igrid)%x) &
+!              /sqrt( (grid(igrid)%x-grid(jgrid)%x)**2 + (grid(igrid)%y-grid(jgrid)%y)**2)**3
+!          gfy = gfy + cons(1,jgrid)*dx*dy*(grid(jgrid)%y-grid(igrid)%y) &
+!              /sqrt( (grid(igrid)%x-grid(jgrid)%x)**2 + (grid(igrid)%y-grid(jgrid)%y)**2)**3
+!       enddo
+!       print *, "GRAVTEST", grid(igrid)%x,grid(igrid)%y,gforce(1,igrid),gforce(2,igrid),gfx,gfy
+!    endif
+
+
+
+    h1=r/object_radius
+    gforce(1,igrid)=gforce(1,igrid)-object_mass*x/r**3*wspline3(h1) &
+                   +object_mass*derivwspline3(h1)*x/(r**2*object_radius)
+    gforce(2,igrid)=gforce(2,igrid)-object_mass*y/r**3*wspline3(h1) &
+                   +object_mass*derivwspline3(h1)*y/(r**2*object_radius)
+
+  enddo
+!$OMP END DO
+
+!$OMP MASTER
+  if (printcom==1) print *,"STAR ",tphase,xobj,yobj,zobj
+!$OMP ENDMASTER
+
+!!!!remove
+!!!!!$OMP BARRIER
+!!!!stop
+ 
+ end subroutine
+!
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Test phi function. 

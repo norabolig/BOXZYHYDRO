@@ -425,9 +425,9 @@ subroutine calculate_states_ang(isten)
  dez=slope_e(3,idx)
  dgz=slope_g(3,idx)
 
- su0=  zero    -vvel*duy -wvel*duz
- sv0=-uvel*dvx + zero    -wvel*dvz
- sw0=-uvel*dwx -vvel*dwy + zero 
+ su0= zero 
+ sv0= zero  
+ sw0= zero 
 
  sr0=zero
  sp0=zero

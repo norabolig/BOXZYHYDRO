@@ -2,25 +2,28 @@
 ! Calculate the force on the fluid. Update the momenta and energy based on 
 ! these changes and divergences of flows. 
 !
-subroutine source
+subroutine source(tphase,siter)
  use parameters
  use derived_types
  use grid_commons
- use utils, only : get_boundary, get_boundary_wb,get_polar,calc_gforce,set_ghost_cells,get_boundary_noanchor
+ use utils, only : get_boundary, get_boundary_wb,get_polar,calc_gforce,&
+     set_ghost_cells,get_boundary_noanchor
+ use selfgravity, only : external_grav
 !
 !
 #ifdef PARTICLE
- use particle, only : kick_particles,add_direct_togrid ! particle.f90
+ use particle, only : kick_particles,add_direct_togrid,zero_forces_on_direct, &
+     zero_forces_on_indirect ! particle.f90
 #endif
 !
 !
  implicit none
 
- integer :: igrid
+ integer :: igrid,siter
  integer :: b(6)
  logical::active
  real(pre)::x,y,r,ux,uy,uz,consold
- real(pre)::ekin,divphi,eps
+ real(pre)::ekin,divphi,eps,tphase
 
  type(units)::scl
 !
@@ -57,7 +60,7 @@ subroutine source
   if(grid(igrid)%boundary>0)cycle
     call get_boundary_noanchor(igrid,b)
 
-    x=grid(igrid)%x;y=grid(igrid)%y+yoffset;r=sqrt(x*x+y*y)
+    x=grid(igrid)%x;y=grid(igrid)%y;r=sqrt(x*x+y*y)
 
     pforce(1,igrid)=-(p(b(3))-p(b(4)))/(cons(1,igrid)*two*dx)
     pforce(2,igrid)=-(p(b(1))-p(b(2)))/(cons(1,igrid)*two*dy)
@@ -105,25 +108,22 @@ subroutine source
 #endif /* end ifdef NOHYDRO */
 !
 !
-#ifdef NOHYDRO
-  if(npart>0.and.use_pic) call calc_gforce() ! gravity.f90
-#else
-  call calc_gforce()
-#endif /* end ifdef NOHYDRO */
-!
-!
-!$OMP BARRIER
 !
 !
 #ifdef PARTICLE
 !
 !
- call kick_particles(dt) ! particle.f90
+ call zero_forces_on_direct()
+ call zero_forces_on_indirect()
 !
 !
 #ifndef NOHYDRO
  call add_direct_togrid() ! particle.f90: kicked particles, so now add potential of particles for gas
 #endif
+!
+! Kick called after add to grid in case gravity backreaction of gas is included.
+!
+ call kick_particles(dt) ! particle.f90
 !
 !
 #endif /* end ifdef PARTICLE */

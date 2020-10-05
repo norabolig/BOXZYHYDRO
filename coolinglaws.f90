@@ -29,7 +29,8 @@ module coolinglaws
 !
  subroutine get_local_divflux()
    real(pre):: sigmaSBcode,dl,vol,opacfac,fluxfac,tirr,ebgrnd,dflux
-   real(pre)::T,kappa,dtau,coolTime,lum
+   real(pre)::T,kappa,dtau,coolTime,lum,eps,ekin,tau_fac
+   integer::igrid
    type(units)::scl
 
    call get_units(scl)
@@ -37,17 +38,14 @@ module coolinglaws
    scale_kappa=scl%mass/scl%length**2
  
    lum=zero
-!$OMP PARALLEL DEFAULT(PRIVATE) SHARED(dx,dy,dz,dt) 
-!$OMP&SHARED(cons,p,muc,scl,ngrid) REDUCTION(+:lum)
-!$OMP call get_units(scl)
    dl=sqrt(dx*dx+dy*dy+dz*dz)
-   vol=dx,dy,dz
+   vol=dx*dy*dz
    opacfac=sqrt(3.)/2.
    fluxfac=8./sqrt(3.)
    sigmaSBcode=5.67d-5/(scl%mass/scl%time**3)
    Tirr=tk_bgrnd
    ebgrnd=tirr*scl%rgas/(muc)
-!$OMP DO SCHEDULE(STATIC)
+!$OMP DO SCHEDULE(STATIC) ! REDUCTION(+:lum)
    do igrid=1,ngrid
      T=p(igrid)/(scl%rgas*cons(1,igrid))*muc
      kappa=get_kappa(T)
@@ -68,9 +66,33 @@ module coolinglaws
      cons(5,igrid)=max(cons(5,igrid)-dflux*dt,ekin)
    enddo
 !$OMP ENDDO
-!$OMP END PARALLEL
    print *, "Luminosity at time ",lum,time
-  end subroutine
+  end subroutine get_local_divflux
+!
+!
+!
+  subroutine get_local_cooling(dtloc)
+   real(pre):: r,tcool,dtloc
+   real(pre)::eps,ekin
+   integer::igrid
+   !type(units)::scl
+
+   !call get_units(scl)
+
+
+!$OMP DO SCHEDULE(STATIC) PRIVATE(ekin,eps,r,tcool)
+   do igrid=1,ngrid
+     r = sqrt( grid(igrid)%x**2 + grid(igrid)%y**2)
+     tcool = two*pi*sqrt(r**3/object_mass)*tcoolfactor
+     ekin=half*(cons(2,igrid)**2+cons(3,igrid)**2+cons(4,igrid)**2)/cons(1,igrid)
+     eps = cons(5,igrid)-ekin
+     eps = max(eps *(one-dtloc/tcool),small_eps)
+     cons(5,igrid)=eps+ekin
+   enddo
+!$OMP ENDDO
+ 
+  end subroutine 
+
 end module
   
  
